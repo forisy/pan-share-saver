@@ -48,6 +48,7 @@ async def login_status(provider: str = "baidu", session_id: str = ""):
 
 @app.post("/transfer", response_model=TransferResult)
 async def transfer(req: TransferLink):
+    print(req.model_dump_json())
     adapter = resolve_adapter_from_link(req.url)
     if adapter is None:
         raise HTTPException(status_code=400, detail="unsupported provider")
