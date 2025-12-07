@@ -20,6 +20,25 @@ app = FastAPI()
 
 _LOGIN_SESSIONS = {}  # 保存二维码 session
 
+_TRANSFER_QUEUE = asyncio.Queue()
+_TRANSFER_PENDING = set()
+
+async def _transfer_worker():
+    while True:
+        adapter, url = await _TRANSFER_QUEUE.get()
+        try:
+            try:
+                await adapter.transfer(url)
+            except Exception:
+                pass
+        finally:
+            _TRANSFER_QUEUE.task_done()
+            # _TRANSFER_PENDING.discard(url)
+
+@app.on_event("startup")
+async def _on_startup():
+    asyncio.create_task(_transfer_worker())
+
 # ================================================
 #                FASTAPI ROUTES
 # ================================================
@@ -52,8 +71,21 @@ async def transfer(req: TransferLink):
     adapter = resolve_adapter_from_link(req.url)
     if adapter is None:
         raise HTTPException(status_code=400, detail="unsupported provider")
-    try:
-        result = await adapter.transfer(req.url)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    url = (req.url or "").strip().strip('`"')
+    if url in _TRANSFER_PENDING:
+        return {
+            "status": "ignored",
+            "provider": getattr(adapter, "name", "unknown"),
+            "share_link": url,
+            "target_path": None,
+            "message": "duplicate",
+        }
+    _TRANSFER_PENDING.add(url)
+    await _TRANSFER_QUEUE.put((adapter, url))
+    return {
+        "status": "accepted",
+        "provider": getattr(adapter, "name", "unknown"),
+        "share_link": url,
+        "target_path": None,
+        "message": "queued",
+    }
