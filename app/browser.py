@@ -16,16 +16,12 @@ class BrowserManager:
             self._playwright.stop()
             self._playwright = None
 
-    def new_browser(self):
+    def new_persistent_context(self, user_data_dir: str):
         self.start()
-        return self._playwright.chromium.launch(headless=HEADLESS)
-
-    def new_context(self, storage_state: Optional[str] = None):
-        browser = self.new_browser()
-        if storage_state and os.path.exists(storage_state):
-            ctx = browser.new_context(storage_state=storage_state)
-        else:
-            ctx = browser.new_context()
-        return ctx
+        base_dir = os.path.abspath(user_data_dir)
+        print(f"Launching persistent context with user data dir: {base_dir}")
+        if base_dir and not os.path.exists(base_dir):
+            os.makedirs(base_dir, exist_ok=True)
+        return self._playwright.chromium.launch_persistent_context(user_data_dir=base_dir, headless=HEADLESS)
 
 manager = BrowserManager()

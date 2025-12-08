@@ -2,7 +2,7 @@ import os
 from typing import Optional, Dict, Any
 import re
 from urllib.parse import urlparse, parse_qs
-from ..config import BAIDU_STORAGE_STATE, HEADLESS, BAIDU_NODE_PATH, BAIDU_TARGET_FOLDER
+from ..config import HEADLESS, BAIDU_NODE_PATH, BAIDU_TARGET_FOLDER, BAIDU_USER_DATA_DIR
 from ..browser import manager
 from .base import ShareAdapter
 
@@ -13,11 +13,8 @@ class BaiduAdapter(ShareAdapter):
         self._sessions = {}
 
     def get_qr_code(self):
-        from playwright.sync_api import sync_playwright
         import uuid, time, base64, io
-        pw = sync_playwright().start()
-        browser = pw.chromium.launch(headless=HEADLESS)
-        ctx = browser.new_context()
+        ctx = manager.new_persistent_context(BAIDU_USER_DATA_DIR)
         page = ctx.new_page()
         page.goto("https://pan.baidu.com/")
         try:
@@ -39,8 +36,6 @@ class BaiduAdapter(ShareAdapter):
         png_bytes = locator.screenshot()
         session_id = str(uuid.uuid4())
         self._sessions[session_id] = {
-            "pw": pw,
-            "browser": browser,
             "ctx": ctx,
             "page": page,
             "expires_at": time.time() + 180,
@@ -58,21 +53,15 @@ class BaiduAdapter(ShareAdapter):
             try:
                 btn = page.query_selector("text=去登录")
                 if btn is None:
-                    storage_dir = os.path.dirname(BAIDU_STORAGE_STATE)
-                    if not os.path.exists(storage_dir):
-                        os.makedirs(storage_dir, exist_ok=True)
-                    session["ctx"].storage_state(path=BAIDU_STORAGE_STATE)
                     session["logged_in"] = True
+                    try:
+                        session["ctx"].close()
+                    except Exception:
+                        pass
                     return
             except Exception as e:
                 print("poll error:", e)
             time.sleep(3)
-        try:
-            session["ctx"].close()
-            session["browser"].close()
-            session["pw"].stop()
-        except:
-            pass
         self._sessions.pop(session_id, None)
 
     def check_login_status(self, session_id):
@@ -83,8 +72,6 @@ class BaiduAdapter(ShareAdapter):
         if time.time() > session["expires_at"]:
             try:
                 session["ctx"].close()
-                session["browser"].close()
-                session["pw"].stop()
             except:
                 pass
             self._sessions.pop(session_id, None)
@@ -92,8 +79,6 @@ class BaiduAdapter(ShareAdapter):
         if session["logged_in"]:
             try:
                 session["ctx"].close()
-                session["browser"].close()
-                session["pw"].stop()
             except:
                 pass
             self._sessions.pop(session_id, None)
@@ -103,7 +88,6 @@ class BaiduAdapter(ShareAdapter):
     @property
     def name(self) -> str:
         return "baidu"
-
 
     def _extract(self, link: str) -> Dict[str, Optional[str]]:
         m = re.search(r'https?://[^\s]+', link)
@@ -119,13 +103,14 @@ class BaiduAdapter(ShareAdapter):
             m2 = re.search(r'(提取码|密码)[:：\s]*([a-zA-Z0-9]{4})', link)
             if m2:
                 code = m2.group(2)
+                url = url.split(m2.group(1))[0]
         return {"url": url, "code": code}
 
     async def transfer(self, link: str) -> Dict[str, Any]:
         import asyncio
 
         def _do():
-            ctx = manager.new_context(BAIDU_STORAGE_STATE)
+            ctx = manager.new_persistent_context(BAIDU_USER_DATA_DIR)
             page = ctx.new_page()
             try:
                 info = self._extract(link)
@@ -150,7 +135,7 @@ class BaiduAdapter(ShareAdapter):
                 page.goto(url, wait_until="domcontentloaded", timeout=40000)
                 try:
                     need_pwd = page.get_by_text("提取码", exact=False)
-                    print('test 提取码')
+                    print(f'test 提取码 {need_pwd.count()}')
                     if need_pwd.count():
                         code = info.get("code")
                         if not code:
