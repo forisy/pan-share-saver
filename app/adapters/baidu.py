@@ -13,34 +13,53 @@ class BaiduAdapter(ShareAdapter):
 
     async def get_qr_code(self):
         import uuid, time, asyncio
+        try:
+            for sid, s in list(self._sessions.items()):
+                try:
+                    await s.get("ctx").close()
+                except Exception:
+                    pass
+                self._sessions.pop(sid, None)
+        except Exception:
+            pass
         ctx = await manager.new_persistent_context(BAIDU_USER_DATA_DIR)
         page = await ctx.new_page()
-        await page.goto("https://pan.baidu.com/")
         try:
-            btn = page.get_by_text("去登录", exact=False)
-            if await btn.count():
-                await btn.first.click()
-        except:
-            pass
-        try:
-            btn = page.get_by_text("扫码登录", exact=False)
-            if await btn.count():
-                await btn.first.click()
-        except:
-            pass
-        locator = page.locator(
-            "img[class*='tang-pass-qrcode-img'], canvas, img[alt*=二维码], img[src*='qr']"
-        ).first
-        await asyncio.sleep(2)
-        png_bytes = await locator.screenshot()
-        session_id = str(uuid.uuid4())
-        self._sessions[session_id] = {
-            "ctx": ctx,
-            "page": page,
-            "expires_at": time.time() + 180,
-            "logged_in": False,
-        }
-        return session_id, png_bytes
+            islogin = False
+            await page.goto("https://pan.baidu.com/", timeout=30000)
+            await asyncio.sleep(3)
+            btn = await page.query_selector("text=我的文件")
+            islogin = btn is not None
+            png_bytes = b""
+            if not islogin:
+                try:
+                    btn = page.get_by_text("去登录", exact=False)
+                    if await btn.count():
+                        await btn.first.click()
+                except:
+                    pass
+                try:
+                    btn = page.get_by_text("扫码登录", exact=False)
+                    if await btn.count():
+                        await btn.first.click()
+                except:
+                    pass
+                locator = page.locator(
+                    "div[class*='pass-login-pop-form'], img[class*='tang-pass-qrcode-img'], canvas, img[alt*=二维码], img[src*='qr']"
+                ).first
+                await asyncio.sleep(2)
+                png_bytes = await locator.screenshot()
+            session_id = str(uuid.uuid4())
+            self._sessions[session_id] = {
+                "ctx": ctx,
+                "page": page,
+                "expires_at": time.time() + 180,
+                "logged_in": islogin,
+            }
+            return session_id, png_bytes, islogin
+        except Exception as e:
+            print(f"get_qr_code error: {e}")
+            return str(uuid.uuid4()), b"", False
 
     async def poll_login_status(self, session_id):
         import asyncio
@@ -113,6 +132,7 @@ class BaiduAdapter(ShareAdapter):
             url = (info["url"] or "").strip().strip('`"')
             print("[baidu] open home")
             await page.goto("https://pan.baidu.com/", wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(1000)
             need_login = await page.query_selector("text=去登录") is not None
             print(f"[baidu] login required: {need_login}")
             if need_login:
@@ -132,6 +152,7 @@ class BaiduAdapter(ShareAdapter):
                 }
             print(f"[baidu] open share: {url}")
             await page.goto(url, wait_until="domcontentloaded", timeout=40000)
+            await page.wait_for_timeout(1000)
             try:
                 need_pwd = page.get_by_text("提取码", exact=False)
                 cnt = await need_pwd.count()

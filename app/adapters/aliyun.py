@@ -12,31 +12,51 @@ class AliyunAdapter(ShareAdapter):
 
     async def get_qr_code(self):
         import uuid, time, asyncio
+        try:
+            for sid, s in list(self._sessions.items()):
+                try:
+                    await s.get("ctx").close()
+                except Exception:
+                    pass
+                self._sessions.pop(sid, None)
+        except Exception:
+            pass
         ctx = await manager.new_persistent_context(ALIYUN_USER_DATA_DIR)
         page = await ctx.new_page()
         try:
-            await page.goto("https://www.alipan.com/sign/in", timeout=30000)
-        except Exception:
-            await page.goto("https://www.aliyundrive.com/sign/in", timeout=30000)
-        try:
-            btn = page.get_by_text("扫码登录", exact=False)
-            if await btn.count():
-                await btn.first.click()
-        except Exception:
-            pass
-        locator = page.locator(
-            "div[class*='login']"
-        ).first
-        await asyncio.sleep(2)
-        png_bytes = await locator.screenshot()
-        session_id = str(uuid.uuid4())
-        self._sessions[session_id] = {
-            "ctx": ctx,
-            "page": page,
-            "expires_at": time.time() + 180,
-            "logged_in": False,
-        }
-        return session_id, png_bytes
+            islogin = False
+            await page.goto("https://www.alipan.com/drive/home", wait_until="domcontentloaded", timeout=40000)
+            await asyncio.sleep(3)
+            btn = await page.query_selector("text=文件分类")
+            islogin = btn is not None
+            png_bytes = b""
+            if not islogin:
+                # try:
+                #     await page.goto("https://www.alipan.com/sign/in", timeout=30000)
+                # except Exception:
+                #     await page.goto("https://www.aliyundrive.com/sign/in", timeout=30000)
+                try:
+                    btn = page.get_by_text("扫码登录", exact=False)
+                    if await btn.count():
+                        await btn.first.click()
+                except Exception:
+                    pass
+                locator = page.locator(
+                    "div[class*='login']"
+                ).first
+                await asyncio.sleep(2)
+                png_bytes = await locator.screenshot()
+            session_id = str(uuid.uuid4())
+            self._sessions[session_id] = {
+                "ctx": ctx,
+                "page": page,
+                "expires_at": time.time() + 180,
+                "logged_in": islogin,
+            }
+            return session_id, png_bytes, islogin
+        except Exception as e:
+            print(f"get_qr_code error: {e}")
+            return str(uuid.uuid4()), b"", False
 
     async def poll_login_status(self, session_id):
         import asyncio, time
@@ -109,6 +129,7 @@ class AliyunAdapter(ShareAdapter):
         try:
             print("[aliyun] open home")
             await page.goto("https://www.alipan.com/drive/home", timeout=30000)
+            await page.wait_for_timeout(1000)
             await page.wait_for_selector("text=文件分类", timeout=30000)
             print(f"[aliyun] open share: {url}")
             await page.goto(url, wait_until="domcontentloaded", timeout=40000)

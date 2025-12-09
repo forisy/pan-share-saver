@@ -47,14 +47,19 @@ async def login_qr(provider: str = "baidu", as_image: bool = False, background_t
     adapter = resolve_adapter_from_provider(provider)
     if not hasattr(adapter, "get_qr_code"):
         raise HTTPException(status_code=400, detail="unsupported provider")
-    session_id, png = await adapter.get_qr_code()
-    asyncio.create_task(adapter.poll_login_status(session_id))
-    if as_image:
-        return StreamingResponse(io.BytesIO(png), media_type="image/png")
+    try:
+        session_id, png, islogin = await adapter.get_qr_code()
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    if not islogin:
+        asyncio.create_task(adapter.poll_login_status(session_id))
+        if as_image:
+            return StreamingResponse(io.BytesIO(png), media_type="image/png")
     return {
         "session_id": session_id,
         "image_base64": base64.b64encode(png).decode(),
         "expires_in": 180,
+        "islogin": islogin,
     }
 
 @app.post("/login/status")
