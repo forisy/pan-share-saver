@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  pan-share-saver-vnc:
+    build: 
+      context: .
+      dockerfile: Dockerfile.vnc
+    container_name: pan-share-saver
+    restart: unless-stopped
+    environment:
+      - HEADLESS=false
+      - STORAGE_DIR=/data/storage
+    ports:
+      - "8000:8000"
+      - "6080:6080"
+      - "5900:5900"
+    volumes:
+      - ./storage:/data/storage
