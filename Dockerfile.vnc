@@ -5,7 +5,13 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HEADLESS=true \
     DISPLAY=:0 \
-    STORAGE_DIR=/data/storage
+    STORAGE_DIR=/data/storage \
+    LANG=zh_CN.UTF-8 \
+    LANGUAGE=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
+    GTK_IM_MODULE=fcitx \
+    QT_IM_MODULE=fcitx \
+    XMODIFIERS=@im=fcitx
 
 WORKDIR /app
 
@@ -14,13 +20,21 @@ RUN python -m pip install --no-cache-dir -r requirements.txt \
     && python -m playwright install-deps \
     && apt-get update \
     && apt-get install -y xvfb x11vnc fluxbox websockify novnc \
+                       fcitx fcitx-pinyin fonts-wqy-zenhei fonts-wqy-microhei locales \
+                       supervisor \
+    && locale-gen zh_CN.UTF-8 \
+    && locale-gen en_US.UTF-8 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* \
     && python -m playwright install chromium
 
-COPY app ./app
+COPY ./app ./app
+COPY supervisord.conf /app/supervisord.conf
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
 RUN mkdir -p /data/storage
 
 EXPOSE 8000 5900 6080
 
-CMD ["sh", "-lc", "Xvfb :0 -screen 0 1280x800x24 & fluxbox & x11vnc -display :0 -forever -nopw -rfbport 5900 -listen 0.0.0.0 & websockify --web=/usr/share/novnc/ 0.0.0.0:6080 localhost:5900 & python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["/app/start.sh"]
