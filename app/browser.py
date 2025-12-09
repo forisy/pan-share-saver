@@ -20,6 +20,16 @@ class BrowserManager:
         base_dir = os.path.abspath(user_data_dir)
         if base_dir and not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
+        try:
+            for fname in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
+                fpath = os.path.join(base_dir, fname)
+                if os.path.exists(fpath):
+                    try:
+                        os.remove(fpath)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         return await self._playwright.chromium.launch_persistent_context(user_data_dir=base_dir, headless=HEADLESS)
 
 manager = BrowserManager()
