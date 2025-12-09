@@ -85,7 +85,7 @@ class AliyunAdapter(ShareAdapter):
         return "aliyun"
 
     def _extract(self, link: str) -> Dict[str, Optional[str]]:
-        m = re.search(r'https?://[^\s]+', link)
+        m = re.search(r'https?://[^\s\u4e00-\u9fff\uFF00-\uFFEF]+', link)
         url = m.group(0) if m else link
         code = None
         try:
@@ -134,6 +134,7 @@ class AliyunAdapter(ShareAdapter):
                         except Exception:
                             pass
                     btn = page.get_by_text("极速查看文件", exact=False)
+                    print(f'test 极速查看文件: {btn.count()}')
                     if btn.count():
                         try:
                             btn.first.click()
@@ -145,24 +146,67 @@ class AliyunAdapter(ShareAdapter):
 
             try:
                 try:
-                    page.wait_for_selector("text=立即保存", timeout=30000)
+                    print('test 立即保存')
+                    btn1 = page.get_by_role("button", name="立即保存", exact=False)
+                    btn1.wait_for(state="visible", timeout=30000)
+                    btn1.first.click()
+                    print('click 立即保存')
                 except Exception:
+                    try:
+                        alt1 = page.get_by_text("立即保存", exact=False)
+                        if alt1.count():
+                            alt1.first.wait_for(state="visible", timeout=30000)
+                            alt1.first.click()
+                            print('click 立即保存')
+                        else:
+                            css1 = page.locator("button:has-text('立即保存'), [class*='btn-save']")
+                            if css1.count():
+                                css1.first.wait_for(state="visible", timeout=30000)
+                                css1.first.click()
+                                print('click 立即保存')
+                    except Exception:
+                        pass
+
+                try:
                     page.wait_for_load_state("networkidle", timeout=30000)
+                except Exception:
+                    pass
 
-                print('wait 保存到网盘')
-                save_btn = page.get_by_text("立即保存", exact=False)
-                if save_btn.count():
+                try:
+                    print('test 保存到根目录')
+                    btn = page.get_by_text("保存到根目录", exact=False)
+                    btn.wait_for(state="visible", timeout=30000)
+                    if btn.count():
+                        sbtn = page.get_by_text("来自分享", exact=False)
+                        sbtn.wait_for(state="visible", timeout=30000)
+                        sbtn.first.click()
+                        print('click 来自分享')
+                except Exception:
+                    pass
+
+                try:
+                    print('test 保存到此处')
+                    btn2 = page.get_by_role("button", name="保存到此处", exact=False)
+                    btn2.wait_for(state="visible", timeout=30000)
+                    btn2.first.click()
+                    print('click 保存到此处')
+                except Exception:
                     try:
-                        save_btn.first.click()
+                        alt2 = page.get_by_text("保存到此处", exact=False)
+                        if alt2.count():
+                            alt2.first.wait_for(state="visible", timeout=30000)
+                            alt2.first.click()
+                            print('click 保存到此处')
+                        else:
+                            css2 = page.locator("button:has-text('保存到此处')")
+                            if css2.count():
+                                css2.first.wait_for(state="visible", timeout=30000)
+                                css2.first.click()
+                                print('click 保存到此处')
                     except Exception:
                         pass
 
-                save_btn = page.get_by_text("保存到此处", exact=False)
-                if save_btn.count():
-                    try:
-                        save_btn.first.click()
-                    except Exception:
-                        pass
+                print('保存成功')
                 page.wait_for_timeout(1000)
                 return {
                     "status": "success",
@@ -171,6 +215,8 @@ class AliyunAdapter(ShareAdapter):
                     "target_path": None,
                     "message": "transferred",
                 }
+            except Exception as e:
+                print('保存失败', e)
             finally:
                 ctx.close()
 

@@ -197,6 +197,7 @@ class BaiduAdapter(ShareAdapter):
                     confirm = page.query_selector('[node-type="confirm"]')
                     if confirm is None:
                         loc = page.get_by_text("确认", exact=False)
+                        print(f'test 确认 {loc.count()}')
                         if loc.count():
                             confirm = loc.first
                     if confirm is not None:
@@ -209,6 +210,7 @@ class BaiduAdapter(ShareAdapter):
                 
                 print('click 保存到网盘')
                 save_btn = page.get_by_text("保存到网盘", exact=False)
+                print(f'test 保存到网盘 {save_btn.count()}')
                 if save_btn.count():
                     try:
                         save_btn.first.click()
@@ -216,12 +218,15 @@ class BaiduAdapter(ShareAdapter):
                         pass
                 else:
                     alt = page.locator("text=保存")
+                    print(f'test 保存 {alt.count()}')
                     if alt.count():
                         try:
                             alt.first.click()
                         except Exception:
                             pass
                 page.wait_for_timeout(1000)
+
+                print('保存成功')
                 return {
                     "status": "success",
                     "provider": self.name,
@@ -229,6 +234,8 @@ class BaiduAdapter(ShareAdapter):
                     "target_path": None,
                     "message": "transferred",
                 }
+            except Exception as e:
+                print('保存失败', e)
             finally:
                 ctx.close()
 
