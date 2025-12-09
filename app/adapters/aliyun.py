@@ -10,25 +10,25 @@ class AliyunAdapter(ShareAdapter):
     def __init__(self):
         self._sessions = {}
 
-    def get_qr_code(self):
-        import uuid, time
-        ctx = manager.new_persistent_context(ALIYUN_USER_DATA_DIR)
-        page = ctx.new_page()
+    async def get_qr_code(self):
+        import uuid, time, asyncio
+        ctx = await manager.new_persistent_context(ALIYUN_USER_DATA_DIR)
+        page = await ctx.new_page()
         try:
-            page.goto("https://www.alipan.com/sign/in", timeout=30000)
+            await page.goto("https://www.alipan.com/sign/in", timeout=30000)
         except Exception:
-            page.goto("https://www.aliyundrive.com/sign/in", timeout=30000)
+            await page.goto("https://www.aliyundrive.com/sign/in", timeout=30000)
         try:
             btn = page.get_by_text("扫码登录", exact=False)
-            if btn.count():
-                btn.first.click()
+            if await btn.count():
+                await btn.first.click()
         except Exception:
             pass
         locator = page.locator(
             "div[class*='login']"
         ).first
-        time.sleep(2)
-        png_bytes = locator.screenshot()
+        await asyncio.sleep(2)
+        png_bytes = await locator.screenshot()
         session_id = str(uuid.uuid4())
         self._sessions[session_id] = {
             "ctx": ctx,
@@ -38,42 +38,42 @@ class AliyunAdapter(ShareAdapter):
         }
         return session_id, png_bytes
 
-    def poll_login_status(self, session_id):
-        import time
+    async def poll_login_status(self, session_id):
+        import asyncio, time
         session = self._sessions.get(session_id)
         if not session:
             return
         page = session["page"]
         for _ in range(60):
             try:
-                btn = page.query_selector("text=文件分类")
+                btn = await page.query_selector("text=文件分类")
                 if btn is not None:
                     session["logged_in"] = True
                     try:
-                        session["ctx"].close()
+                        await session["ctx"].close()
                     except Exception:
                         pass
                     return
             except Exception:
                 pass
-            time.sleep(3)
+            await asyncio.sleep(3)
         self._sessions.pop(session_id, None)
 
-    def check_login_status(self, session_id):
+    async def check_login_status(self, session_id):
         import time
         session = self._sessions.get(session_id)
         if not session:
             return {"status": "not_found"}
         if time.time() > session["expires_at"]:
             try:
-                session["ctx"].close()
+                await session["ctx"].close()
             except Exception:
                 pass
             self._sessions.pop(session_id, None)
             return {"status": "expired"}
         if session["logged_in"]:
             try:
-                session["ctx"].close()
+                await session["ctx"].close()
             except Exception:
                 pass
             self._sessions.pop(session_id, None)
@@ -102,122 +102,130 @@ class AliyunAdapter(ShareAdapter):
         return {"url": url, "code": code}
 
     async def transfer(self, link: str) -> Dict[str, Any]:
-        import asyncio
-
-        def _do():
-            ctx = manager.new_persistent_context(ALIYUN_USER_DATA_DIR)
-            page = ctx.new_page()
-            info = self._extract(link)
-            url = (info["url"] or "").strip().strip('`"')
-            print("goto login check")
-            page.goto("https://www.alipan.com/drive/home", timeout=30000)
-            page.wait_for_selector("text=文件分类", timeout=30000)
-            print(f"goto {url}")
-            page.goto(url, wait_until="domcontentloaded", timeout=40000)
-            page.wait_for_timeout(1000)
+        ctx = await manager.new_persistent_context(ALIYUN_USER_DATA_DIR)
+        page = await ctx.new_page()
+        info = self._extract(link)
+        url = (info["url"] or "").strip().strip('`"')
+        try:
+            print("[aliyun] open home")
+            await page.goto("https://www.alipan.com/drive/home", timeout=30000)
+            await page.wait_for_selector("text=文件分类", timeout=30000)
+            print(f"[aliyun] open share: {url}")
+            await page.goto(url, wait_until="domcontentloaded", timeout=40000)
+            await page.wait_for_timeout(1000)
             try:
                 need_pwd = page.get_by_text("分享了文件", exact=False)
-                print(f'test 提取码: {need_pwd.count()}')
-                if need_pwd.count():
+                cnt = await need_pwd.count()
+                print(f"[aliyun] need code: {cnt}")
+                if cnt:
                     code = info.get("code")
                     if not code:
+                        print("[aliyun] missing code")
                         return {
                             "status": "fail",
                             "provider": self.name,
                             "share_link": url,
                             "message": "缺少提取码",
                         }
-                    inp = page.query_selector("input[placeholder*=请输入提取码], input[type='text']")
+                    inp = await page.query_selector("input[placeholder*=请输入提取码], input[type='text']")
                     if inp:
                         try:
-                            inp.fill(code)
+                            await inp.fill(code)
+                            print(f"[aliyun] code filled: {code}")
                         except Exception:
                             pass
                     btn = page.get_by_text("极速查看文件", exact=False)
-                    print(f'test 极速查看文件: {btn.count()}')
-                    if btn.count():
+                    btn_cnt = await btn.count()
+                    print(f"[aliyun] click 极速查看文件: {btn_cnt}")
+                    if btn_cnt:
                         try:
-                            btn.first.click()
+                            await btn.first.click()
                         except Exception:
                             pass
-                    page.wait_for_load_state("domcontentloaded", timeout=30000)
+                    await page.wait_for_load_state("domcontentloaded", timeout=30000)
             except Exception:
                 pass
 
             try:
                 try:
-                    print('test 立即保存')
                     btn1 = page.get_by_role("button", name="立即保存", exact=False)
-                    btn1.wait_for(state="visible", timeout=30000)
-                    btn1.first.click()
-                    print('click 立即保存')
+                    await btn1.wait_for(state="visible", timeout=30000)
+                    print("[aliyun] click 立即保存")
+                    await btn1.first.click()
                 except Exception:
                     try:
                         alt1 = page.get_by_text("立即保存", exact=False)
-                        if alt1.count():
-                            alt1.first.wait_for(state="visible", timeout=30000)
-                            alt1.first.click()
-                            print('click 立即保存')
+                        alt1_cnt = await alt1.count()
+                        print(f"[aliyun] click 立即保存 alt: {alt1_cnt}")
+                        if alt1_cnt:
+                            await alt1.first.wait_for(state="visible", timeout=30000)
+                            await alt1.first.click()
                         else:
                             css1 = page.locator("button:has-text('立即保存'), [class*='btn-save']")
-                            if css1.count():
-                                css1.first.wait_for(state="visible", timeout=30000)
-                                css1.first.click()
-                                print('click 立即保存')
+                            css1_cnt = await css1.count()
+                            print(f"[aliyun] click 立即保存 css: {css1_cnt}")
+                            if css1_cnt:
+                                await css1.first.wait_for(state="visible", timeout=30000)
+                                await css1.first.click()
                     except Exception:
                         pass
+            except Exception:
+                pass
 
+            try:
+                await page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+
+            try:
+                btn = page.get_by_text("保存到根目录", exact=False)
+                await btn.wait_for(state="visible", timeout=30000)
+                btn_root_cnt = await btn.count()
+                print(f"[aliyun] click 保存到根目录: {btn_root_cnt}")
+                if btn_root_cnt:
+                    sbtn = page.get_by_text("来自分享", exact=False)
+                    await sbtn.wait_for(state="visible", timeout=30000)
+                    print("[aliyun] click 来自分享")
+                    await sbtn.first.click()
+            except Exception:
+                pass
+
+            try:
+                btn2 = page.get_by_role("button", name="保存到此处", exact=False)
+                await btn2.wait_for(state="visible", timeout=30000)
+                print("[aliyun] click 保存到此处")
+                await btn2.first.click()
+            except Exception:
                 try:
-                    page.wait_for_load_state("networkidle", timeout=30000)
+                    alt2 = page.get_by_text("保存到此处", exact=False)
+                    alt2_cnt = await alt2.count()
+                    print(f"[aliyun] click 保存到此处 alt: {alt2_cnt}")
+                    if alt2_cnt:
+                        await alt2.first.wait_for(state="visible", timeout=30000)
+                        await alt2.first.click()
+                    else:
+                        css2 = page.locator("button:has-text('保存到此处')")
+                        css2_cnt = await css2.count()
+                        print(f"[aliyun] click 保存到此处 css: {css2_cnt}")
+                        if css2_cnt:
+                            await css2.first.wait_for(state="visible", timeout=30000)
+                            await css2.first.click()
                 except Exception:
                     pass
 
-                try:
-                    print('test 保存到根目录')
-                    btn = page.get_by_text("保存到根目录", exact=False)
-                    btn.wait_for(state="visible", timeout=30000)
-                    if btn.count():
-                        sbtn = page.get_by_text("来自分享", exact=False)
-                        sbtn.wait_for(state="visible", timeout=30000)
-                        sbtn.first.click()
-                        print('click 来自分享')
-                except Exception:
-                    pass
-
-                try:
-                    print('test 保存到此处')
-                    btn2 = page.get_by_role("button", name="保存到此处", exact=False)
-                    btn2.wait_for(state="visible", timeout=30000)
-                    btn2.first.click()
-                    print('click 保存到此处')
-                except Exception:
-                    try:
-                        alt2 = page.get_by_text("保存到此处", exact=False)
-                        if alt2.count():
-                            alt2.first.wait_for(state="visible", timeout=30000)
-                            alt2.first.click()
-                            print('click 保存到此处')
-                        else:
-                            css2 = page.locator("button:has-text('保存到此处')")
-                            if css2.count():
-                                css2.first.wait_for(state="visible", timeout=30000)
-                                css2.first.click()
-                                print('click 保存到此处')
-                    except Exception:
-                        pass
-
-                print('保存成功')
-                page.wait_for_timeout(1000)
-                return {
-                    "status": "success",
-                    "provider": self.name,
-                    "share_link": link,
-                    "target_path": None,
-                    "message": "transferred",
-                }
             except Exception as e:
-                print('保存失败', e)
-            finally:
-                ctx.close()
+                print(f"[aliyun] click save actions failed: {e}")
 
-        return await asyncio.to_thread(_do)
+            await page.wait_for_timeout(1000)
+            print("[aliyun] transfer success")
+            return {
+                "status": "success",
+                "provider": self.name,
+                "share_link": link,
+                "target_path": None,
+                "message": "transferred",
+            }
+        except Exception as e:
+            print(f"[aliyun] transfer failed: {e}")
+        finally:
+            await ctx.close()

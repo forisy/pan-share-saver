@@ -6,34 +6,33 @@ from ..config import HEADLESS, BAIDU_NODE_PATH, BAIDU_TARGET_FOLDER, BAIDU_USER_
 from ..browser import manager
 from .base import ShareAdapter
 
- 
 
 class BaiduAdapter(ShareAdapter):
     def __init__(self):
         self._sessions = {}
 
-    def get_qr_code(self):
-        import uuid, time, base64, io
-        ctx = manager.new_persistent_context(BAIDU_USER_DATA_DIR)
-        page = ctx.new_page()
-        page.goto("https://pan.baidu.com/")
+    async def get_qr_code(self):
+        import uuid, time, asyncio
+        ctx = await manager.new_persistent_context(BAIDU_USER_DATA_DIR)
+        page = await ctx.new_page()
+        await page.goto("https://pan.baidu.com/")
         try:
             btn = page.get_by_text("去登录", exact=False)
-            if btn.count():
-                btn.first.click()
+            if await btn.count():
+                await btn.first.click()
         except:
             pass
         try:
             btn = page.get_by_text("扫码登录", exact=False)
-            if btn.count():
-                btn.first.click()
+            if await btn.count():
+                await btn.first.click()
         except:
             pass
         locator = page.locator(
             "img[class*='tang-pass-qrcode-img'], canvas, img[alt*=二维码], img[src*='qr']"
         ).first
-        time.sleep(2)
-        png_bytes = locator.screenshot()
+        await asyncio.sleep(2)
+        png_bytes = await locator.screenshot()
         session_id = str(uuid.uuid4())
         self._sessions[session_id] = {
             "ctx": ctx,
@@ -43,42 +42,42 @@ class BaiduAdapter(ShareAdapter):
         }
         return session_id, png_bytes
 
-    def poll_login_status(self, session_id):
-        import time, os
+    async def poll_login_status(self, session_id):
+        import asyncio
         session = self._sessions.get(session_id)
         if not session:
             return
         page = session["page"]
         for _ in range(60):
             try:
-                btn = page.query_selector("text=去登录")
+                btn = await page.query_selector("text=去登录")
                 if btn is None:
                     session["logged_in"] = True
                     try:
-                        session["ctx"].close()
+                        await session["ctx"].close()
                     except Exception:
                         pass
                     return
-            except Exception as e:
-                print("poll error:", e)
-            time.sleep(3)
+            except Exception:
+                pass
+            await asyncio.sleep(3)
         self._sessions.pop(session_id, None)
 
-    def check_login_status(self, session_id):
+    async def check_login_status(self, session_id):
         import time
         session = self._sessions.get(session_id)
         if not session:
             return {"status": "not_found"}
         if time.time() > session["expires_at"]:
             try:
-                session["ctx"].close()
+                await session["ctx"].close()
             except:
                 pass
             self._sessions.pop(session_id, None)
             return {"status": "expired"}
         if session["logged_in"]:
             try:
-                session["ctx"].close()
+                await session["ctx"].close()
             except:
                 pass
             self._sessions.pop(session_id, None)
@@ -107,136 +106,139 @@ class BaiduAdapter(ShareAdapter):
         return {"url": url, "code": code}
 
     async def transfer(self, link: str) -> Dict[str, Any]:
-        import asyncio
-
-        def _do():
-            ctx = manager.new_persistent_context(BAIDU_USER_DATA_DIR)
-            page = ctx.new_page()
-            try:
-                info = self._extract(link)
-                url = (info["url"] or "").strip().strip('`"')
-                print("goto login check")
-                page.goto("https://pan.baidu.com/", wait_until="domcontentloaded", timeout=30000)
-                if page.query_selector("text=去登录") is not None:
-                    return {
-                        "status": "fail",
-                        "provider": self.name,
-                        "share_link": url,
-                        "message": "未登录，请先扫码登录后再转存",
-                    }
-                if not url:
-                    return {
-                        "status": "fail",
-                        "provider": self.name,
-                        "share_link": url,
-                        "message": "分享链接无效",
-                    }
-                print(f"goto {url}")
-                page.goto(url, wait_until="domcontentloaded", timeout=40000)
-                try:
-                    need_pwd = page.get_by_text("提取码", exact=False)
-                    print(f'test 提取码 {need_pwd.count()}')
-                    if need_pwd.count():
-                        code = info.get("code")
-                        if not code:
-                            return {
-                                "status": "fail",
-                                "provider": self.name,
-                                "share_link": url,
-                                "message": "缺少提取码",
-                            }
-                        inp = page.query_selector("input[name*=pwd], input[aria-label*=提取码], input[type='text']")
-                        if inp:
-                            try:
-                                inp.fill(code)
-                            except Exception:
-                                pass
-                        btn = page.get_by_text("提取文件", exact=False)
-                        if btn.count():
-                            try:
-                                btn.first.click()
-                            except Exception:
-                                pass
-                        page.wait_for_load_state("domcontentloaded", timeout=30000)
-                except Exception:
-                    pass
-                
-                print('wait 保存到网盘')
-                try:
-                    page.wait_for_selector("text=保存到网盘", timeout=30000)
-                except Exception:
-                    page.wait_for_load_state("networkidle", timeout=30000)
-
-                if BAIDU_TARGET_FOLDER:
-                    print('click save-path')
-                    btn_path = page.query_selector('div[class*="bottom-save-path"]') or page.query_selector('div[class*="save-path"]')
-                    if btn_path:
-                        try:
-                            btn_path.click()
-                        except Exception:
-                            pass
-                    try:
-                        print('wait file-tree-container')
-                        page.wait_for_selector("div[class*='file-tree-container'], div[class*='file-tree']", timeout=30000)
-                    except Exception:
-                        pass
-
-                    print('set node-path')
-                    folder = page.query_selector(f'[node-path="{BAIDU_NODE_PATH}"]')
-                    if folder is None:
-                        loc = page.get_by_text(BAIDU_TARGET_FOLDER, exact=False)
-                        if loc.count():
-                            folder = loc.first
-                    if folder is not None:
-                        try:
-                            folder.click()
-                        except Exception:
-                            pass
-                    page.wait_for_timeout(500)
-                    print('confirm save-path')
-                    confirm = page.query_selector('[node-type="confirm"]')
-                    if confirm is None:
-                        loc = page.get_by_text("确认", exact=False)
-                        print(f'test 确认 {loc.count()}')
-                        if loc.count():
-                            confirm = loc.first
-                    if confirm is not None:
-                        try:
-                            confirm.click()
-                        except Exception:
-                            pass
-                    page.wait_for_timeout(800)
-                    
-                
-                print('click 保存到网盘')
-                save_btn = page.get_by_text("保存到网盘", exact=False)
-                print(f'test 保存到网盘 {save_btn.count()}')
-                if save_btn.count():
-                    try:
-                        save_btn.first.click()
-                    except Exception:
-                        pass
-                else:
-                    alt = page.locator("text=保存")
-                    print(f'test 保存 {alt.count()}')
-                    if alt.count():
-                        try:
-                            alt.first.click()
-                        except Exception:
-                            pass
-                page.wait_for_timeout(1000)
-
-                print('保存成功')
+        ctx = await manager.new_persistent_context(BAIDU_USER_DATA_DIR)
+        page = await ctx.new_page()
+        try:
+            info = self._extract(link)
+            url = (info["url"] or "").strip().strip('`"')
+            print("[baidu] open home")
+            await page.goto("https://pan.baidu.com/", wait_until="domcontentloaded", timeout=30000)
+            need_login = await page.query_selector("text=去登录") is not None
+            print(f"[baidu] login required: {need_login}")
+            if need_login:
                 return {
-                    "status": "success",
+                    "status": "fail",
                     "provider": self.name,
                     "share_link": url,
-                    "target_path": None,
-                    "message": "transferred",
+                    "message": "未登录，请先扫码登录后再转存",
                 }
-            except Exception as e:
-                print('保存失败', e)
-            finally:
-                ctx.close()
+            if not url:
+                print("[baidu] invalid share url")
+                return {
+                    "status": "fail",
+                    "provider": self.name,
+                    "share_link": url,
+                    "message": "分享链接无效",
+                }
+            print(f"[baidu] open share: {url}")
+            await page.goto(url, wait_until="domcontentloaded", timeout=40000)
+            try:
+                need_pwd = page.get_by_text("提取码", exact=False)
+                cnt = await need_pwd.count()
+                print(f"[baidu] need code: {cnt}")
+                if cnt:
+                    code = info.get("code")
+                    if not code:
+                        print("[baidu] missing code")
+                        return {
+                            "status": "fail",
+                            "provider": self.name,
+                            "share_link": url,
+                            "message": "缺少提取码",
+                        }
+                    inp = await page.query_selector("input[name*=pwd], input[aria-label*=提取码], input[type='text']")
+                    if inp:
+                        try:
+                            await inp.fill(code)
+                            print(f"[baidu] code filled: {code}")
+                        except Exception:
+                            pass
+                    btn = page.get_by_text("提取文件", exact=False)
+                    btn_cnt = await btn.count()
+                    print(f"[baidu] click 提取文件: {btn_cnt}")
+                    if btn_cnt:
+                        try:
+                            await btn.first.click()
+                        except Exception:
+                            pass
+                    await page.wait_for_load_state("domcontentloaded", timeout=30000)
+            except Exception:
+                pass
 
-        return await asyncio.to_thread(_do)
+            try:
+                print("[baidu] wait 保存到网盘")
+                await page.wait_for_selector("text=保存到网盘", timeout=30000)
+            except Exception:
+                await page.wait_for_load_state("networkidle", timeout=30000)
+
+            if BAIDU_TARGET_FOLDER:
+                print("[baidu] select save path panel")
+                btn_path = await page.query_selector('div[class*="bottom-save-path"]') or await page.query_selector('div[class*="save-path"]')
+                if btn_path:
+                    try:
+                        await btn_path.click()
+                        print("[baidu] save path panel opened")
+                    except Exception:
+                        pass
+                try:
+                    await page.wait_for_selector("div[class*='file-tree-container'], div[class*='file-tree']", timeout=30000)
+                except Exception:
+                    pass
+
+                print(f"[baidu] locate folder: {BAIDU_NODE_PATH}")
+                folder = await page.query_selector(f'[node-path="{BAIDU_NODE_PATH}"]')
+                if folder is None:
+                    loc = page.get_by_text(BAIDU_TARGET_FOLDER, exact=False)
+                    if await loc.count():
+                        folder = loc.first
+                if folder is not None:
+                    try:
+                        await folder.click()
+                        print("[baidu] folder selected")
+                    except Exception:
+                        pass
+                await page.wait_for_timeout(500)
+                confirm = await page.query_selector('[node-type="confirm"]')
+                if confirm is None:
+                    loc = page.get_by_text("确认", exact=False)
+                    if await loc.count():
+                        confirm = loc.first
+                if confirm is not None:
+                    try:
+                        await confirm.click()
+                        print("[baidu] confirm path")
+                    except Exception:
+                        pass
+                await page.wait_for_timeout(800)
+
+            save_btn = page.get_by_text("保存到网盘", exact=False)
+            save_cnt = await save_btn.count()
+            print(f"[baidu] click 保存到网盘: {save_cnt}")
+            if save_cnt:
+                try:
+                    await save_btn.first.click()
+                except Exception:
+                    pass
+            else:
+                alt = page.locator("text=保存")
+                alt_cnt = await alt.count()
+                print(f"[baidu] click 保存: {alt_cnt}")
+                if alt_cnt:
+                    try:
+                        await alt.first.click()
+                    except Exception:
+                        pass
+            await page.wait_for_timeout(1000)
+
+            print("[baidu] transfer success")
+            return {
+                "status": "success",
+                "provider": self.name,
+                "share_link": url,
+                "target_path": None,
+                "message": "transferred",
+            }
+        except Exception as e:
+            print(f"[baidu] transfer failed: {e}")
+        finally:
+            await ctx.close()

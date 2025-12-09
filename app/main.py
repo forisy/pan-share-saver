@@ -47,8 +47,8 @@ async def login_qr(provider: str = "baidu", as_image: bool = False, background_t
     adapter = resolve_adapter_from_provider(provider)
     if not hasattr(adapter, "get_qr_code"):
         raise HTTPException(status_code=400, detail="unsupported provider")
-    session_id, png = await asyncio.to_thread(adapter.get_qr_code)
-    background_tasks.add_task(asyncio.to_thread, adapter.poll_login_status, session_id)
+    session_id, png = await adapter.get_qr_code()
+    asyncio.create_task(adapter.poll_login_status(session_id))
     if as_image:
         return StreamingResponse(io.BytesIO(png), media_type="image/png")
     return {
@@ -62,7 +62,7 @@ async def login_status(provider: str = "baidu", session_id: str = ""):
     adapter = resolve_adapter_from_provider(provider)
     if not hasattr(adapter, "check_login_status"):
         raise HTTPException(status_code=400, detail="unsupported provider")
-    return await asyncio.to_thread(adapter.check_login_status, session_id)
+    return await adapter.check_login_status(session_id)
 
 
 @app.post("/transfer", response_model=TransferResult)
