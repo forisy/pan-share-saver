@@ -6,6 +6,7 @@ services:
     restart: unless-stopped
     environment:
       - HEADLESS=true
+      - TZ=Asia/Shanghai
       - STORAGE_DIR=/data/storage
     ports:
       - "8000:8000"

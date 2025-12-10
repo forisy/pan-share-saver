@@ -23,8 +23,8 @@ class JuejinSigninAdapter(TaskAdapter):
         await page.goto("https://juejin.cn/user/center/signin?from=main_page", wait_until="domcontentloaded", timeout=40000)
         await asyncio.sleep(3)
 
-        ant = page.get_by_text("登录")
-        if await ant.count() > 0:
+        ant = page.get_by_text("连续签到天数")
+        if await ant.count() == 0:
             return {"status": "error", "message": "需要登陆"}
         
         await page.wait_for_selector("text=每日签到", state="visible")
@@ -38,13 +38,14 @@ class JuejinSigninAdapter(TaskAdapter):
 
         await page.goto("https://juejin.cn/user/center/lottery?from=sign_in_success", wait_until="domcontentloaded", timeout=40000)
         await asyncio.sleep(3)
-        await page.wait_for_selector("text=幸运大转盘", state="visible")
-        lottery = page.locator("button[class*='lottery']", has_text="免费抽奖")
+        await page.wait_for_selector("div[class*='text-free']", state="visible")
+        lottery = page.locator("div[class*='text-free']")
         if await lottery.count() > 0:
-            await lottery.click()
+            await lottery.first.click()
             print('抽奖成功')
         else:
             print('已抽奖')
+        await asyncio.sleep(5)
 
         await ctx.close()
             

@@ -4,6 +4,7 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     HEADLESS=true \
+    TZ=Asia/Shanghai \
     DISPLAY=:0 \
     STORAGE_DIR=/data/storage \
     LANG=zh_CN.UTF-8 \
@@ -21,7 +22,7 @@ RUN python -m pip install --no-cache-dir -r requirements.txt \
     && apt-get update \
     && apt-get install -y xvfb tigervnc-standalone-server fluxbox websockify novnc \
                        fcitx fcitx-pinyin fonts-wqy-zenhei fonts-wqy-microhei locales \
-                       supervisor \
+                       tzdata supervisor \
     && locale-gen zh_CN.UTF-8 \
     && locale-gen en_US.UTF-8 \
     && apt-get clean \

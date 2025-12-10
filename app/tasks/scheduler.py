@@ -4,12 +4,14 @@ import os
 import json
 from typing import Optional, Dict, Any, List
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from zoneinfo import ZoneInfo
 from .registry import resolve_task_adapter
 from ..config import STORAGE_DIR
 
 class TaskScheduler:
     def __init__(self) -> None:
-        self._scheduler = AsyncIOScheduler()
+        tzname = os.getenv("TZ", "Asia/Shanghai")
+        self._scheduler = AsyncIOScheduler(timezone=ZoneInfo(tzname))
         self._started = False
         self._loaded_jobs: List[str] = []
 
