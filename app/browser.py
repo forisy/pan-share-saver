@@ -16,7 +16,6 @@ class BrowserManager:
             self._playwright = None
 
     async def new_persistent_context(self, user_data_dir: str):
-        await self.start()
         base_dir = os.path.abspath(user_data_dir)
         if base_dir and not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
@@ -31,6 +30,8 @@ class BrowserManager:
                         pass
         except Exception:
             pass
+        
+        await self.start()
         return await self._playwright.chromium.launch_persistent_context(user_data_dir=base_dir, headless=HEADLESS)
 
 manager = BrowserManager()
