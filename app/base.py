@@ -31,8 +31,14 @@ class ShareAdapter(ABC):
         return base
 
     async def open_context_and_page(self, account: Optional[str] = None):
-        ctx = await manager.new_persistent_context(self._resolve_user_data_dir(account))
-        page = await ctx.new_page()
+        ud = self._resolve_user_data_dir(account)
+        ctx = await manager.new_persistent_context(ud)
+        try:
+            page = await ctx.new_page()
+        except Exception:
+            await manager.close_context(ud)
+            ctx = await manager.new_persistent_context(ud)
+            page = await ctx.new_page()
         return ctx, page
 
 class TaskAdapter(ABC):
