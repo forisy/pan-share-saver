@@ -6,6 +6,7 @@ from .baidu import BaiduAdapter
 from .aliyun import AliyunAdapter
 from .juejin import JuejinAdapter
 from .v2ex import V2exAdapter
+from .ptfans import PtfansAdapter
 
 _REGISTRY = {
     "baidu": BaiduAdapter(),
@@ -15,6 +16,7 @@ _REGISTRY = {
     "alipan": AliyunAdapter(),
     "juejin": JuejinAdapter(),
     "v2ex": V2exAdapter(),
+    "ptfans": PtfansAdapter(),
 }
 
 def _extract_url(link: str) -> Optional[str]:
