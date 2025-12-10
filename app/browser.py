@@ -23,6 +23,7 @@ class BrowserManager:
         try:
             for fname in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
                 fpath = os.path.join(base_dir, fname)
+                print(f"remove {fpath}")
                 if os.path.exists(fpath):
                     try:
                         os.remove(fpath)

@@ -3,14 +3,15 @@ from typing import Optional, Dict, Any
 import re
 from urllib.parse import urlparse, parse_qs
 from ..config import HEADLESS, ALIYUN_NODE_PATH, ALIYUN_TARGET_FOLDER, ALIYUN_USER_DATA_DIR
-from ..browser import manager
-from .base import ShareAdapter
+from ..base import ShareAdapter
 
 class AliyunAdapter(ShareAdapter):
     def __init__(self):
+        super().__init__()
         self._sessions = {}
+        self.user_data_dir = ALIYUN_USER_DATA_DIR
 
-    async def get_qr_code(self):
+    async def get_qr_code(self, account: Optional[str] = None):
         import uuid, time, asyncio
         try:
             for sid, s in list(self._sessions.items()):
@@ -21,8 +22,7 @@ class AliyunAdapter(ShareAdapter):
                 self._sessions.pop(sid, None)
         except Exception:
             pass
-        ctx = await manager.new_persistent_context(ALIYUN_USER_DATA_DIR)
-        page = await ctx.new_page()
+        ctx, page = await self.open_context_and_page(account)
         try:
             islogin = False
             await page.goto("https://www.alipan.com/drive/home", wait_until="domcontentloaded", timeout=40000)
@@ -79,27 +79,6 @@ class AliyunAdapter(ShareAdapter):
             await asyncio.sleep(3)
         self._sessions.pop(session_id, None)
 
-    async def check_login_status(self, session_id):
-        import time
-        session = self._sessions.get(session_id)
-        if not session:
-            return {"status": "not_found"}
-        if time.time() > session["expires_at"]:
-            try:
-                await session["ctx"].close()
-            except Exception:
-                pass
-            self._sessions.pop(session_id, None)
-            return {"status": "expired"}
-        if session["logged_in"]:
-            try:
-                await session["ctx"].close()
-            except Exception:
-                pass
-            self._sessions.pop(session_id, None)
-            return {"status": "success"}
-        return {"status": "pending"}
-
     @property
     def name(self) -> str:
         return "aliyun"
@@ -121,9 +100,8 @@ class AliyunAdapter(ShareAdapter):
                 url = url.split(m2.group(1))[0]
         return {"url": url, "code": code}
 
-    async def transfer(self, link: str) -> Dict[str, Any]:
-        ctx = await manager.new_persistent_context(ALIYUN_USER_DATA_DIR)
-        page = await ctx.new_page()
+    async def transfer(self, link: str, account: Optional[str] = None) -> Dict[str, Any]:
+        ctx, page = await self.open_context_and_page(account)
         info = self._extract(link)
         url = (info["url"] or "").strip().strip('`"')
         try:

@@ -1,9 +1,10 @@
 from typing import Optional
 import re
 from urllib.parse import urlparse
-from .base import ShareAdapter
+from ..base import ShareAdapter
 from .baidu import BaiduAdapter
 from .aliyun import AliyunAdapter
+from .juejin import JuejinAdapter
 
 _REGISTRY = {
     "baidu": BaiduAdapter(),
@@ -11,6 +12,7 @@ _REGISTRY = {
     "aliyun": AliyunAdapter(),
     "aliyundrive": AliyunAdapter(),
     "alipan": AliyunAdapter(),
+    "juejin": JuejinAdapter(),
 }
 
 def _extract_url(link: str) -> Optional[str]:
