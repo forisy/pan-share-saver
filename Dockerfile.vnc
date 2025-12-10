@@ -19,7 +19,7 @@ COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir -r requirements.txt \
     && python -m playwright install-deps \
     && apt-get update \
-    && apt-get install -y xvfb x11vnc fluxbox websockify novnc \
+    && apt-get install -y xvfb tigervnc-standalone-server fluxbox websockify novnc \
                        fcitx fcitx-pinyin fonts-wqy-zenhei fonts-wqy-microhei locales \
                        supervisor \
     && locale-gen zh_CN.UTF-8 \
