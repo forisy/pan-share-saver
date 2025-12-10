@@ -5,6 +5,21 @@ from .config import HEADLESS
 class BrowserManager:
     def __init__(self) -> None:
         self._playwright = None
+        self._contexts = {}
+
+    def _cleanup_profile_locks(self, base_dir: str):
+        try:
+            targets = {"SingletonLock", "SingletonCookie", "SingletonSocket", "DevToolsActivePort", "LOCK"}
+            for root, _, files in os.walk(base_dir):
+                for fname in list(files):
+                    if fname in targets:
+                        fpath = os.path.join(root, fname)
+                        try:
+                            os.remove(fpath)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 
     async def start(self) -> None:
         if self._playwright is None:
@@ -12,6 +27,15 @@ class BrowserManager:
 
     async def stop(self) -> None:
         if self._playwright is not None:
+            try:
+                for bdir, ctx in list(self._contexts.items()):
+                    try:
+                        await ctx.close()
+                    except Exception:
+                        pass
+                    self._contexts.pop(bdir, None)
+            except Exception:
+                pass
             await self._playwright.stop()
             self._playwright = None
 
@@ -19,19 +43,25 @@ class BrowserManager:
         base_dir = os.path.abspath(user_data_dir)
         if base_dir and not os.path.exists(base_dir):
             os.makedirs(base_dir, exist_ok=True)
-        try:
-            for fname in ("SingletonLock", "SingletonCookie", "SingletonSocket"):
-                fpath = os.path.join(base_dir, fname)
-                print(f"remove {fpath}")
-                if os.path.exists(fpath):
-                    try:
-                        os.remove(fpath)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+        ctx = self._contexts.get(base_dir)
+        if ctx is not None:
+            return ctx
+        self._cleanup_profile_locks(base_dir)
         
         await self.start()
-        return await self._playwright.chromium.launch_persistent_context(user_data_dir=base_dir, headless=HEADLESS)
+        ctx = await self._playwright.chromium.launch_persistent_context(user_data_dir=base_dir, headless=HEADLESS, args=["--no-default-browser-check", "--no-first-run"])
+        self._contexts[base_dir] = ctx
+        return ctx
+
+    async def close_context(self, user_data_dir: str):
+        base_dir = os.path.abspath(user_data_dir)
+        ctx = self._contexts.get(base_dir)
+        if ctx is not None:
+            try:
+                await ctx.close()
+            except Exception:
+                pass
+            self._contexts.pop(base_dir, None)
+        self._cleanup_profile_locks(base_dir)
 
 manager = BrowserManager()

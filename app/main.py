@@ -2,7 +2,8 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from .schemas import TransferLink, TransferResult, ScheduleAtReq, ScheduleBetweenReq, ScheduleWindowReq, ScheduleResult, RunTaskReq, RunTaskResult
 from .tasks.scheduler import task_scheduler
-from .config import TASKS_CONFIG_PATH
+from .config import TASKS_CONFIG_PATH, BAIDU_USER_DATA_DIR, ALIYUN_USER_DATA_DIR, JUEJIN_USER_DATA_DIR, V2EX_USER_DATA_DIR
+from .browser import manager
 from .tasks.registry import resolve_task_adapter
 from .adapters.registry import resolve_adapter_from_link, resolve_adapter_from_provider
 
@@ -44,6 +45,18 @@ async def _on_startup():
     task_scheduler.start()
     try:
         task_scheduler.load_from_config(TASKS_CONFIG_PATH)
+    except Exception:
+        pass
+    try:
+        for bdir in (BAIDU_USER_DATA_DIR, ALIYUN_USER_DATA_DIR, JUEJIN_USER_DATA_DIR, V2EX_USER_DATA_DIR):
+            manager._cleanup_profile_locks(bdir)
+    except Exception:
+        pass
+
+@app.on_event("shutdown")
+async def _on_shutdown():
+    try:
+        await manager.stop()
     except Exception:
         pass
 

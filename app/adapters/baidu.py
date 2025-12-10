@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 import re
 from urllib.parse import urlparse, parse_qs
 from ..config import HEADLESS, BAIDU_NODE_PATH, BAIDU_TARGET_FOLDER, BAIDU_USER_DATA_DIR
+from ..browser import manager
 from ..base import ShareAdapter
 
 
@@ -17,12 +18,17 @@ class BaiduAdapter(ShareAdapter):
         try:
             for sid, s in list(self._sessions.items()):
                 try:
-                    await s.get("ctx").close()
+                    ud = s.get("user_data_dir")
+                    if ud:
+                        await manager.close_context(ud)
+                    else:
+                        await s.get("ctx").close()
                 except Exception:
                     pass
                 self._sessions.pop(sid, None)
         except Exception:
             pass
+        ud = self._resolve_user_data_dir(account)
         ctx, page = await self.open_context_and_page(account)
         try:
             islogin = False
@@ -55,6 +61,7 @@ class BaiduAdapter(ShareAdapter):
                 "page": page,
                 "expires_at": time.time() + 180,
                 "logged_in": islogin,
+                "user_data_dir": ud,
             }
             return session_id, png_bytes, islogin
         except Exception as e:
@@ -73,7 +80,7 @@ class BaiduAdapter(ShareAdapter):
                 if btn is None:
                     session["logged_in"] = True
                     try:
-                        await session["ctx"].close()
+                        await manager.close_context(session.get("user_data_dir"))
                     except Exception:
                         pass
                     return
@@ -240,4 +247,7 @@ class BaiduAdapter(ShareAdapter):
         except Exception as e:
             print(f"[baidu] transfer failed: {e}")
         finally:
-            await ctx.close()
+            try:
+                await manager.close_context(self._resolve_user_data_dir(account))
+            except Exception:
+                pass

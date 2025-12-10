@@ -3,6 +3,7 @@ from typing import Optional, Dict, Any
 import re
 from urllib.parse import urlparse, parse_qs
 from ..config import HEADLESS, ALIYUN_NODE_PATH, ALIYUN_TARGET_FOLDER, ALIYUN_USER_DATA_DIR
+from ..browser import manager
 from ..base import ShareAdapter
 
 class AliyunAdapter(ShareAdapter):
@@ -16,12 +17,17 @@ class AliyunAdapter(ShareAdapter):
         try:
             for sid, s in list(self._sessions.items()):
                 try:
-                    await s.get("ctx").close()
+                    ud = s.get("user_data_dir")
+                    if ud:
+                        await manager.close_context(ud)
+                    else:
+                        await s.get("ctx").close()
                 except Exception:
                     pass
                 self._sessions.pop(sid, None)
         except Exception:
             pass
+        ud = self._resolve_user_data_dir(account)
         ctx, page = await self.open_context_and_page(account)
         try:
             islogin = False
@@ -52,6 +58,7 @@ class AliyunAdapter(ShareAdapter):
                 "page": page,
                 "expires_at": time.time() + 180,
                 "logged_in": islogin,
+                "user_data_dir": ud,
             }
             return session_id, png_bytes, islogin
         except Exception as e:
@@ -70,7 +77,7 @@ class AliyunAdapter(ShareAdapter):
                 if btn is not None:
                     session["logged_in"] = True
                     try:
-                        await session["ctx"].close()
+                        await manager.close_context(session.get("user_data_dir"))
                     except Exception:
                         pass
                     return
@@ -227,4 +234,7 @@ class AliyunAdapter(ShareAdapter):
         except Exception as e:
             print(f"[aliyun] transfer failed: {e}")
         finally:
-            await ctx.close()
+            try:
+                await manager.close_context(self._resolve_user_data_dir(account))
+            except Exception:
+                pass
