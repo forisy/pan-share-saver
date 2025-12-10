@@ -5,6 +5,7 @@ from ..base import ShareAdapter
 from .baidu import BaiduAdapter
 from .aliyun import AliyunAdapter
 from .juejin import JuejinAdapter
+from .v2ex import V2exAdapter
 
 _REGISTRY = {
     "baidu": BaiduAdapter(),
@@ -13,6 +14,7 @@ _REGISTRY = {
     "aliyundrive": AliyunAdapter(),
     "alipan": AliyunAdapter(),
     "juejin": JuejinAdapter(),
+    "v2ex": V2exAdapter(),
 }
 
 def _extract_url(link: str) -> Optional[str]:

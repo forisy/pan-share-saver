@@ -42,3 +42,15 @@ class ScheduleResult(BaseModel):
     adapter: str
     scheduled_at: datetime
     status: str
+
+
+class RunTaskReq(BaseModel):
+    adapter: str
+    provider: Optional[str] = None
+    accounts: Optional[List[str]] = None
+
+
+class RunTaskResult(BaseModel):
+    status: str
+    adapter: str
+    message: Optional[str] = None

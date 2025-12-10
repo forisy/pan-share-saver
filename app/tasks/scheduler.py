@@ -27,6 +27,9 @@ class TaskScheduler:
         except Exception as e:
             return {"status": "error", "message": str(e), "adapter": adapter_name}
 
+    async def run_now(self, adapter_name: str, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+        return await self._run_task(adapter_name, provider, accounts)
+
     def schedule_at(self, adapter_name: str, run_at: datetime, job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
         self.start()
         job = self._scheduler.add_job(self._run_task, "date", run_date=run_at, args=[adapter_name, provider, accounts], id=job_id)

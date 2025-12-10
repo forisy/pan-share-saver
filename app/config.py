@@ -11,4 +11,5 @@ ALIYUN_NODE_PATH = f"/{ALIYUN_TARGET_FOLDER}"
 BAIDU_USER_DATA_DIR = os.path.join(STORAGE_DIR, "baidu_userdata")
 ALIYUN_USER_DATA_DIR = os.path.join(STORAGE_DIR, "aliyun_userdata")
 JUEJIN_USER_DATA_DIR = os.path.join(STORAGE_DIR, "juejin_userdata")
+V2EX_USER_DATA_DIR = os.path.join(STORAGE_DIR, "v2ex_userdata")
 TASKS_CONFIG_PATH = os.path.join(STORAGE_DIR, "tasks.json")

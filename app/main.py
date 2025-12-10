@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
-from .schemas import TransferLink, TransferResult, ScheduleAtReq, ScheduleBetweenReq, ScheduleWindowReq, ScheduleResult
+from .schemas import TransferLink, TransferResult, ScheduleAtReq, ScheduleBetweenReq, ScheduleWindowReq, ScheduleResult, RunTaskReq, RunTaskResult
 from .tasks.scheduler import task_scheduler
 from .config import TASKS_CONFIG_PATH
 from .tasks.registry import resolve_task_adapter
@@ -148,6 +148,17 @@ async def schedule_window(req: ScheduleWindowReq):
         "adapter": result["adapter"],
         "scheduled_at": result["scheduled_at"],
         "status": result["status"],
+    }
+
+@app.post("/tasks/run_now", response_model=RunTaskResult)
+async def run_now(req: RunTaskReq):
+    if resolve_task_adapter(req.adapter) is None:
+        raise HTTPException(status_code=400, detail="adapter_not_found")
+    result = await task_scheduler.run_now(req.adapter, provider=req.provider, accounts=req.accounts)
+    return {
+        "status": result.get("status"),
+        "adapter": req.adapter,
+        "message": result.get("message"),
     }
 
 @app.get("/adapters/enabled")
