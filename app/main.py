@@ -11,6 +11,7 @@ import asyncio
 import os
 import base64
 import io
+from watchfiles import awatch
 
 # Windows Playwright 修复
 if os.name == "nt":
@@ -39,12 +40,33 @@ async def _transfer_worker():
             _TRANSFER_QUEUE.task_done()
             # _TRANSFER_PENDING.discard(url)
 
+async def _tasks_config_watcher():
+    watch_dir = TASKS_CONFIG_PATH or "."
+    if os.path.isdir(watch_dir):
+        async for changes in awatch(watch_dir):
+            try:
+                target = os.path.normcase(os.path.abspath(watch_dir))
+                for _, changed in changes:
+                    if os.path.normcase(os.path.abspath(changed)) == target:
+                        try:
+                            task_scheduler.reload_from_config(changed)
+                        except Exception:
+                            pass
+                        break
+            except Exception:
+                pass
+
 @app.on_event("startup")
 async def _on_startup():
     asyncio.create_task(_transfer_worker())
+    try:
+        os.makedirs(TASKS_CONFIG_PATH or ".", exist_ok=True)
+    except Exception:
+        pass
+    asyncio.create_task(_tasks_config_watcher())
     task_scheduler.start()
     try:
-        task_scheduler.load_from_config(TASKS_CONFIG_PATH)
+        task_scheduler.load_from_config(os.path.join(TASKS_CONFIG_PATH or ".", "tasks.json"))
     except Exception:
         pass
     try:

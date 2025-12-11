@@ -73,7 +73,7 @@ requirements.txt
   - 实际定位路径为 `BAIDU_NODE_PATH = "/{BAIDU_TARGET_FOLDER}"`
 - `ALIYUN_TARGET_FOLDER`：转存目标文件夹名，默认空字符串（根目录）
   - 实际定位路径为 `ALIYUN_NODE_PATH = "/{ALIYUN_TARGET_FOLDER}"`
-- `TASKS_CONFIG_PATH`：任务配置文件路径，默认 `app/tasks/tasks.json`。也可设置为 `storage/tasks.json` 以实现外部持久化管理。
+- `TASKS_CONFIG_PATH`：任务配置文件夹路径，默认 `app/config`。也可设置为 `storage/config` 以实现外部持久化管理。
 
 ### VNC 显示与自适应
 - noVNC 支持本地缩放与远端分辨率调整：
@@ -151,9 +151,9 @@ requirements.txt
 
 ## 任务调度与配置
 - 支持通过 JSON 配置文件定义“任务名称/定时规则/执行入口”，应用启动时自动加载。
-- 配置文件位置：
-  - 默认：`app/tasks/tasks.json`
-  - 持久化：将其放至 `storage/tasks.json` 并设置环境变量 `TASKS_CONFIG_PATH=storage/tasks.json`
+- 配置文件夹位置：
+  - 默认：`app/config`
+  - 持久化：将其放至 `storage/config` 并设置环境变量 `TASKS_CONFIG_PATH=storage/config`
 
 ### 配置示例
 ```json

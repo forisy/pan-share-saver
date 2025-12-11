@@ -20,6 +20,17 @@ class TaskScheduler:
             self._scheduler.start()
             self._started = True
 
+    def clear_loaded_jobs(self) -> None:
+        self.start()
+        try:
+            for jid in list(self._loaded_jobs):
+                try:
+                    self._scheduler.remove_job(jid)
+                except Exception:
+                    pass
+        finally:
+            self._loaded_jobs.clear()
+
     async def _run_task(self, adapter_name: str, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
         adapter = resolve_task_adapter(adapter_name)
         if adapter is None:
@@ -61,16 +72,16 @@ class TaskScheduler:
         job = self._scheduler.add_job(self._run_task, "cron", id=job_id, args=[adapter_name, provider, accounts], **cron_fields)
         return {"job_id": job.id, "adapter": adapter_name, "scheduled_at": "cron", "status": "scheduled"}
 
-    def load_from_config(self, config_path: Optional[str] = None) -> Dict[str, Any]:
+    def load_from_config(self, config_file_path: Optional[str] = None) -> Dict[str, Any]:
         self.start()
         result: Dict[str, Any] = {"status": "ok", "loaded": []}
         path_candidates: List[str] = []
-        if config_path:
-            path_candidates.append(config_path)
+        if config_file_path:
+            path_candidates.append(config_file_path)
         # default location inside repository
-        path_candidates.append(os.path.join(os.path.dirname(__file__), "tasks.json"))
+        path_candidates.append(os.path.join(os.path.dirname(__file__), "..", "config", "tasks.json"))
         # optional storage override
-        path_candidates.append(os.path.join(STORAGE_DIR, "tasks.json"))
+        path_candidates.append(os.path.join(STORAGE_DIR, "config", "tasks.json"))
         cfg_path = next((p for p in path_candidates if os.path.exists(p)), None)
         if not cfg_path:
             return {"status": "not_found", "message": "no tasks.json found", "searched": path_candidates}
@@ -145,6 +156,14 @@ class TaskScheduler:
             except Exception:
                 continue
         return result
+
+    def reload_from_config(self, config_file_path: Optional[str] = None) -> Dict[str, Any]:
+        self.clear_loaded_jobs()
+        # if config not found, simply return empty loaded list
+        try:
+            return self.load_from_config(config_file_path)
+        except Exception:
+            return {"status": "error", "message": "reload_failed"}
 
 task_scheduler = TaskScheduler()
 
