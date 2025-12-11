@@ -10,6 +10,8 @@ services:
       - HEADLESS=false
       - TZ=Asia/Shanghai
       - STORAGE_DIR=/data/storage
+    tty: true
+    stdin_open: true
     ports:
       - "8000:8000"
       - "6080:6080"
