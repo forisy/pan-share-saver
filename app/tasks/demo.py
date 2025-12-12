@@ -8,15 +8,15 @@ class DemoAdapter(TaskAdapter):
     def name(self) -> str:
         return "demo"
 
-    async def run(self, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def run(self, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         logger = create_logger("demo")
         logger.info(f"Starting demo task, provider: {provider}, accounts: {len(accounts) if accounts else 0}")
-        
+
         if not provider:
             logger.info("No provider specified, returning available providers")
             return {
                 "status": "success",
-                "providers": ["baidu", "aliyun"],
+                "providers": ["baidu", "alipan"],
             }
         p = provider.lower()
         adapter = resolve_adapter_from_provider(p)
@@ -24,6 +24,6 @@ class DemoAdapter(TaskAdapter):
             logger.error(f"Unknown provider: {provider}")
             return {"status": "error", "message": "unknown_provider", "provider": provider}
         logger.info(f"Opening context and page for provider: {p}")
-        ctx, page = await adapter.open_context_and_page()
+        ctx, page = await adapter.open_context_and_page(cookie_str=cookies)
         logger.info("Demo task completed successfully")
         return {"status": "success"}

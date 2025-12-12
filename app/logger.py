@@ -1,7 +1,7 @@
 """
 Unified logging module for PanShareSaver application.
 
-Supports module prefixes in log messages like `[aliyun] click 保存到此处`
+Supports module prefixes in log messages like `[alipan] click 保存到此处`
 for better debugging and monitoring of different components.
 """
 import logging
@@ -17,7 +17,7 @@ def get_logger(module_name: str, level: Optional[int] = None) -> logging.Logger:
     Get or create a logger instance with the specified module name.
 
     Args:
-        module_name: Name of the module (e.g., 'baidu', 'aliyun', 'scheduler')
+        module_name: Name of the module (e.g., 'baidu', 'alipan', 'scheduler')
         level: Optional logging level (defaults to INFO)
 
     Returns:
@@ -71,7 +71,7 @@ class ModuleLogger:
         Initialize the ModuleLogger with a specific module name.
 
         Args:
-            module_name: Name of the module (e.g., 'baidu', 'aliyun')
+            module_name: Name of the module (e.g., 'baidu', 'alipan')
             level: Optional logging level (defaults to INFO)
         """
         self.module_name = module_name
@@ -152,7 +152,7 @@ def create_logger(module_name: str, level: Optional[int] = None) -> ModuleLogger
     Create a ModuleLogger instance for the specified module name.
 
     Args:
-        module_name: Name of the module (e.g., 'baidu', 'aliyun')
+        module_name: Name of the module (e.g., 'baidu', 'alipan')
         level: Optional logging level (defaults to INFO)
 
     Returns:
@@ -165,7 +165,7 @@ def log_debug(module_name: str, message: str, *args, **kwargs):
     Log a debug message with the specified module prefix.
 
     Args:
-        module_name: Name of the module (e.g., 'baidu', 'aliyun')
+        module_name: Name of the module (e.g., 'baidu', 'alipan')
         message: The message to log
         *args: Additional arguments for formatting
         **kwargs: Additional keyword arguments
@@ -178,7 +178,7 @@ def log_info(module_name: str, message: str, *args, **kwargs):
     Log an info message with the specified module prefix.
 
     Args:
-        module_name: Name of the module (e.g., 'baidu', 'aliyun')
+        module_name: Name of the module (e.g., 'baidu', 'alipan')
         message: The message to log
         *args: Additional arguments for formatting
         **kwargs: Additional keyword arguments
@@ -191,7 +191,7 @@ def log_warning(module_name: str, message: str, *args, **kwargs):
     Log a warning message with the specified module prefix.
 
     Args:
-        module_name: Name of the module (e.g., 'baidu', 'aliyun')
+        module_name: Name of the module (e.g., 'baidu', 'alipan')
         message: The message to log
         *args: Additional arguments for formatting
         **kwargs: Additional keyword arguments
@@ -204,7 +204,7 @@ def log_error(module_name: str, message: str, *args, **kwargs):
     Log an error message with the specified module prefix.
 
     Args:
-        module_name: Name of the module (e.g., 'baidu', 'aliyun')
+        module_name: Name of the module (e.g., 'baidu', 'alipan')
         message: The message to log
         *args: Additional arguments for formatting
         **kwargs: Additional keyword arguments
@@ -217,7 +217,7 @@ def log_critical(module_name: str, message: str, *args, **kwargs):
     Log a critical message with the specified module prefix.
 
     Args:
-        module_name: Name of the module (e.g., 'baidu', 'aliyun')
+        module_name: Name of the module (e.g., 'baidu', 'alipan')
         message: The message to log
         *args: Additional arguments for formatting
         **kwargs: Additional keyword arguments
@@ -232,7 +232,7 @@ def print_with_module(module_name: str, message: str):
     This can be used to replace existing print statements easily.
 
     Args:
-        module_name: Name of the module (e.g., 'baidu', 'aliyun')
+        module_name: Name of the module (e.g., 'baidu', 'alipan')
         message: The message to log
     """
     log_info(module_name, message)

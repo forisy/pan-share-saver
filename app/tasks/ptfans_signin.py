@@ -8,10 +8,10 @@ class PtfansSigninAdapter(TaskAdapter):
     def name(self) -> str:
         return "ptfans_signin"
 
-    async def run(self, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def run(self, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         logger = create_logger("ptfans_signin")
         logger.info(f"Starting Ptfans signin task, provider: {provider}, accounts: {len(accounts) if accounts else 0}")
-        
+
         if not provider:
             logger.info("No provider specified, returning available providers")
             return {
@@ -25,7 +25,7 @@ class PtfansSigninAdapter(TaskAdapter):
             return {"status": "error", "message": "unknown_provider", "provider": provider}
 
         import asyncio
-        ctx, page = await adapter.open_context_and_page(accounts[0] if accounts else None)
+        ctx, page = await adapter.open_context_and_page(accounts[0] if accounts else None, cookie_str=cookies)
         logger.info("Navigating to Ptfans attendance page")
         await page.goto("https://ptfans.cc/attendance.php", wait_until="domcontentloaded", timeout=40000)
         await asyncio.sleep(3)

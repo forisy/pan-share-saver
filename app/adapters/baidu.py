@@ -1,8 +1,7 @@
-import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 import re
 from urllib.parse import urlparse, parse_qs
-from ..config import HEADLESS, BAIDU_NODE_PATH, BAIDU_TARGET_FOLDER, BAIDU_USER_DATA_DIR
+from ..config import BAIDU_NODE_PATH, BAIDU_TARGET_FOLDER, BAIDU_USER_DATA_DIR
 from ..browser import manager
 from ..base import ShareAdapter
 from ..logger import create_logger
@@ -117,9 +116,9 @@ class BaiduAdapter(ShareAdapter):
                 url = url.split(m2.group(1))[0]
         return {"url": url, "code": code}
 
-    async def transfer(self, link: str, account: Optional[str] = None) -> Dict[str, Any]:
+    async def transfer(self, link: str, account: Optional[str] = None, cookie_str: Optional[Any] = None) -> Dict[str, Any]:
         self.logger.info(f"Starting transfer for link: {link[:50]}..." if len(link) > 50 else f"Starting transfer for link: {link}")
-        ctx, page = await self.open_context_and_page(account)
+        ctx, page = await self.open_context_and_page(account, cookie_str=cookie_str)
         try:
             info = self._extract(link)
             url = (info["url"] or "").strip().strip('`"')

@@ -1,18 +1,18 @@
 import os
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 import re
 from urllib.parse import urlparse, parse_qs
-from ..config import HEADLESS, ALIYUN_NODE_PATH, ALIYUN_TARGET_FOLDER, ALIYUN_USER_DATA_DIR
+from ..config import HEADLESS, ALIPAN_NODE_PATH, ALIPAN_TARGET_FOLDER, ALIPAN_USER_DATA_DIR
 from ..browser import manager
 from ..base import ShareAdapter
 from ..logger import create_logger
 
-class AliyunAdapter(ShareAdapter):
-    def __init__(self):
+class AlipanAdapter(ShareAdapter):
+    def __init__(self) -> None:
         super().__init__()
         self._sessions = {}
-        self.user_data_dir = ALIYUN_USER_DATA_DIR
-        self.logger = create_logger("aliyun")
+        self.user_data_dir = ALIPAN_USER_DATA_DIR
+        self.logger = create_logger("alipan")
 
     async def get_qr_code(self, account: Optional[str] = None):
         import uuid, time, asyncio
@@ -33,7 +33,7 @@ class AliyunAdapter(ShareAdapter):
         ctx, page = await self.open_context_and_page(account)
         try:
             islogin = False
-            self.logger.info("Opening Aliyun home page")
+            self.logger.info("Opening Alipan home page")
             await page.goto("https://www.alipan.com/drive/home", wait_until="domcontentloaded", timeout=40000)
             await asyncio.sleep(3)
             btn = await page.query_selector("text=文件分类")
@@ -96,7 +96,7 @@ class AliyunAdapter(ShareAdapter):
 
     @property
     def name(self) -> str:
-        return "aliyun"
+        return "alipan"
 
     def _extract(self, link: str) -> Dict[str, Optional[str]]:
         m = re.search(r'https?://[^\s\u4e00-\u9fff\uFF00-\uFFEF]+', link)
@@ -115,13 +115,13 @@ class AliyunAdapter(ShareAdapter):
                 url = url.split(m2.group(1))[0]
         return {"url": url, "code": code}
 
-    async def transfer(self, link: str, account: Optional[str] = None) -> Dict[str, Any]:
+    async def transfer(self, link: str, account: Optional[str] = None, cookie_str: Optional[Any] = None) -> Dict[str, Any]:
         self.logger.info(f"Starting transfer for link: {link[:50]}..." if len(link) > 50 else f"Starting transfer for link: {link}")
-        ctx, page = await self.open_context_and_page(account)
+        ctx, page = await self.open_context_and_page(account, cookie_str=cookie_str)
         info = self._extract(link)
         url = (info["url"] or "").strip().strip('`"')
         try:
-            self.logger.info("Opening Aliyun home page")
+            self.logger.info("Opening Alipan home page")
             await page.goto("https://www.alipan.com/drive/home", timeout=30000)
             await page.wait_for_timeout(1000)
             await page.wait_for_selector("text=文件分类", timeout=30000)

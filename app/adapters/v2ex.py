@@ -1,7 +1,5 @@
-import os
-from typing import Optional, Dict, Any
-from urllib.parse import urlparse, parse_qs
-from ..config import HEADLESS, ALIYUN_NODE_PATH, ALIYUN_TARGET_FOLDER, V2EX_USER_DATA_DIR
+from typing import Optional, Dict, Any, Union
+from ..config import V2EX_USER_DATA_DIR
 from ..browser import manager
 from ..base import ShareAdapter
 from ..logger import create_logger
@@ -87,7 +85,3 @@ class V2exAdapter(ShareAdapter):
     def name(self) -> str:
         return "v2ex"
 
-    async def transfer(self, link: str, account: Optional[str] = None) -> Dict[str, Any]:
-        # Transfer functionality not implemented for V2EX
-        self.logger.warning("Transfer method called but not implemented for V2EX")
-        pass

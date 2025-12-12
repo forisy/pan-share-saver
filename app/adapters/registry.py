@@ -3,7 +3,7 @@ import re
 from urllib.parse import urlparse
 from ..base import ShareAdapter
 from .baidu import BaiduAdapter
-from .aliyun import AliyunAdapter
+from .alipan import AlipanAdapter
 from .juejin import JuejinAdapter
 from .v2ex import V2exAdapter
 from .ptfans import PtfansAdapter
@@ -12,9 +12,8 @@ from ..logger import create_logger
 _REGISTRY = {
     "baidu": BaiduAdapter(),
     "baidupan": BaiduAdapter(),
-    "aliyun": AliyunAdapter(),
-    "aliyundrive": AliyunAdapter(),
-    "alipan": AliyunAdapter(),
+    "alipan": AlipanAdapter(),
+    "aliyundrive": AlipanAdapter(),
     "juejin": JuejinAdapter(),
     "v2ex": V2exAdapter(),
     "ptfans": PtfansAdapter(),
@@ -38,8 +37,8 @@ def resolve_adapter_from_link(link: str) -> Optional[ShareAdapter]:
         logger.info(f"Resolved Baidu adapter for link: {link}")
         return _REGISTRY.get('baidu')
     if netloc.endswith('aliyundrive.com') or netloc.endswith('alipan.com'):
-        logger.info(f"Resolved Aliyun adapter for link: {link}")
-        return _REGISTRY.get('aliyun')
+        logger.info(f"Resolved Alipan adapter for link: {link}")
+        return _REGISTRY.get('alipan')
     logger.warning(f"No adapter found for link: {link}, netloc: {netloc}")
     return None
 

@@ -1,10 +1,11 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, List
+from typing import Optional, List, Union, Dict, Any
 from datetime import datetime
 
 class TransferLink(BaseModel):
     url: Optional[str] = None
     account: Optional[str] = None
+    cookies: Optional[Any] = None
     model_config = ConfigDict(extra='ignore')
 
 class TransferResult(BaseModel):
@@ -19,6 +20,7 @@ class ScheduleAtReq(BaseModel):
     run_at: datetime
     provider: Optional[str] = None
     accounts: Optional[List[str]] = None
+    cookies: Optional[Any] = None
 
 
 class ScheduleBetweenReq(BaseModel):
@@ -27,6 +29,7 @@ class ScheduleBetweenReq(BaseModel):
     end_at: datetime
     provider: Optional[str] = None
     accounts: Optional[List[str]] = None
+    cookies: Optional[Any] = None
 
 
 class ScheduleWindowReq(BaseModel):
@@ -35,6 +38,7 @@ class ScheduleWindowReq(BaseModel):
     window_minutes: int
     provider: Optional[str] = None
     accounts: Optional[List[str]] = None
+    cookies: Optional[Any] = None
 
 
 class ScheduleResult(BaseModel):
@@ -48,6 +52,7 @@ class RunTaskReq(BaseModel):
     adapter: str
     provider: Optional[str] = None
     accounts: Optional[List[str]] = None
+    cookies: Optional[Any] = None
 
 
 class RunTaskResult(BaseModel):

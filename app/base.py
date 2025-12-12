@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 import os
 from .browser import manager
 
@@ -12,9 +12,8 @@ class ShareAdapter(ABC):
     def name(self) -> str:
         ...
 
-    @abstractmethod
-    async def transfer(self, link: str, account: Optional[str] = None) -> Dict[str, Any]:
-        ...
+    async def transfer(self, link: str, account: Optional[str] = None, cookie_str: Optional[Any] = None) -> Dict[str, Any]:
+        raise NotImplementedError("Transfer functionality not implemented for this adapter")
 
     def _sanitize(self, s: str) -> str:
         return ''.join(c if c.isalnum() or c in ('_', '-') else '_' for c in s)[:64]
@@ -30,14 +29,14 @@ class ShareAdapter(ABC):
         os.makedirs(base, exist_ok=True)
         return base
 
-    async def open_context_and_page(self, account: Optional[str] = None):
+    async def open_context_and_page(self, account: Optional[str] = None, cookie_str: Optional[Any] = None):
         ud = self._resolve_user_data_dir(account)
-        ctx = await manager.new_persistent_context(ud)
+        ctx = await manager.new_persistent_context(ud, cookie_str)
         try:
             page = await ctx.new_page()
         except Exception:
             await manager.close_context(ud)
-            ctx = await manager.new_persistent_context(ud)
+            ctx = await manager.new_persistent_context(ud, cookie_str)
             page = await ctx.new_page()
         return ctx, page
 
@@ -48,5 +47,5 @@ class TaskAdapter(ABC):
         ...
 
     @abstractmethod
-    async def run(self, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def run(self, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         ...

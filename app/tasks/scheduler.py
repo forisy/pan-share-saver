@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 import random
 import os
 import json
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from zoneinfo import ZoneInfo
 from .registry import resolve_task_adapter
@@ -41,34 +41,34 @@ class TaskScheduler:
             self._loaded_jobs.clear()
             self.logger.info("All loaded jobs cleared")
 
-    async def _run_task(self, adapter_name: str, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def _run_task(self, adapter_name: str, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         self.logger.info(f"Running task: {adapter_name}, provider: {provider}, accounts: {len(accounts) if accounts else 0}")
         adapter = resolve_task_adapter(adapter_name)
         if adapter is None:
             self.logger.error(f"Adapter not found: {adapter_name}")
             return {"status": "error", "message": "adapter_not_found", "adapter": adapter_name}
         try:
-            result = await adapter.run(provider, accounts)
+            result = await adapter.run(provider, accounts, cookies)
             self.logger.info(f"Task completed: {adapter_name}, result: {result.get('status', 'unknown')}")
             return result
         except Exception as e:
             self.logger.error(f"Task failed: {adapter_name}, error: {e}")
             return {"status": "error", "message": str(e), "adapter": adapter_name}
 
-    async def run_now(self, adapter_name: str, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def run_now(self, adapter_name: str, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         self.logger.info(f"Running task immediately: {adapter_name}")
-        return await self._run_task(adapter_name, provider, accounts)
+        return await self._run_task(adapter_name, provider, accounts, cookies)
 
-    def schedule_at(self, adapter_name: str, run_at: datetime, job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    def schedule_at(self, adapter_name: str, run_at: datetime, job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         if not self._started:
             self.start()
         job_id = job_id or f"task:{adapter_name}:{run_at.timestamp()}"
         self.logger.info(f"Scheduling task '{adapter_name}' at {run_at} with job_id: {job_id}")
-        job = self._scheduler.add_job(self._run_task, "date", run_date=run_at, args=[adapter_name, provider, accounts], id=job_id)
+        job = self._scheduler.add_job(self._run_task, "date", run_date=run_at, args=[adapter_name, provider, accounts, cookies], id=job_id)
         self._loaded_jobs.append(job_id)
-        return {"job_id": job.id, "adapter": adapter_name, "scheduled_at": run_at.isoformat(), "status": "scheduled"}
+        return {"job_id": job_id, "adapter": adapter_name, "scheduled_at": run_at.isoformat(), "status": "scheduled"}
 
-    def schedule_between(self, adapter_name: str, start_at: datetime, end_at: datetime, job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    def schedule_between(self, adapter_name: str, start_at: datetime, end_at: datetime, job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         if not self._started:
             self.start()
         if end_at <= start_at:
@@ -79,11 +79,11 @@ class TaskScheduler:
         run_at = start_at + timedelta(seconds=offset)
         job_id = job_id or f"task:{adapter_name}:{run_at.timestamp()}"
         self.logger.info(f"Scheduling task '{adapter_name}' between {start_at} and {end_at}, will run at {run_at} with job_id: {job_id}")
-        job = self._scheduler.add_job(self._run_task, "date", run_date=run_at, args=[adapter_name, provider, accounts], id=job_id)
+        job = self._scheduler.add_job(self._run_task, "date", run_date=run_at, args=[adapter_name, provider, accounts, cookies], id=job_id)
         self._loaded_jobs.append(job_id)
         return {"job_id": job.id, "adapter": adapter_name, "scheduled_at": run_at.isoformat(), "status": "scheduled"}
 
-    def schedule_window(self, adapter_name: str, base_at: datetime, window_minutes: int, job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    def schedule_window(self, adapter_name: str, base_at: datetime, window_minutes: int, job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         if not self._started:
             self.start()
         if window_minutes < 0:
@@ -93,16 +93,16 @@ class TaskScheduler:
         run_at = base_at + timedelta(minutes=offset_min)
         job_id = job_id or f"task:{adapter_name}:{run_at.timestamp()}"
         self.logger.info(f"Scheduling task '{adapter_name}' with window {window_minutes} min around {base_at}, will run at {run_at} with job_id: {job_id}")
-        job = self._scheduler.add_job(self._run_task, "date", run_date=run_at, args=[adapter_name, provider, accounts], id=job_id)
+        job = self._scheduler.add_job(self._run_task, "date", run_date=run_at, args=[adapter_name, provider, accounts, cookies], id=job_id)
         self._loaded_jobs.append(job_id)
         return {"job_id": job.id, "adapter": adapter_name, "scheduled_at": run_at.isoformat(), "status": "scheduled"}
 
-    def schedule_cron(self, adapter_name: str, cron_fields: Dict[str, Any], job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None) -> Dict[str, Any]:
+    def schedule_cron(self, adapter_name: str, cron_fields: Dict[str, Any], job_id: Optional[str] = None, provider: Optional[str] = None, accounts: Optional[List[str]] = None, cookies: Optional[Any] = None) -> Dict[str, Any]:
         if not self._started:
             self.start()
         job_id = job_id or f"task:{adapter_name}:cron:{len(self._loaded_jobs)+1}"
         self.logger.info(f"Scheduling task '{adapter_name}' with cron {cron_fields} and job_id: {job_id}")
-        job = self._scheduler.add_job(self._run_task, "cron", id=job_id, args=[adapter_name, provider, accounts], **cron_fields)
+        job = self._scheduler.add_job(self._run_task, "cron", id=job_id, args=[adapter_name, provider, accounts, cookies], **cron_fields)
         self._loaded_jobs.append(job_id)
         return {"job_id": job.id, "adapter": adapter_name, "scheduled_at": "cron", "status": "scheduled"}
 
@@ -138,7 +138,19 @@ class TaskScheduler:
             entry = (item.get("entry") or item.get("adapter") or '').strip()
             provider = (item.get("provider") or item.get("provider_name") or '').strip() or None
             accounts = item.get("accounts") if isinstance(item.get("accounts"), list) else None
-            sched = item.get("schedule") or {}
+            # Support both string and object formats for cookies
+            cookies = item.get("cookies") or None
+            sched_raw = item.get("schedule")
+            # Handle both string (crontab) and dict (object) formats for schedule
+            if isinstance(sched_raw, str):
+                # If schedule is a string, treat it as a crontab
+                sched = {"crontab": sched_raw}
+            elif isinstance(sched_raw, dict):
+                # If schedule is a dict, use it as-is
+                sched = sched_raw
+            else:
+                # Default to empty dict if schedule is None or other type
+                sched = {}
             if not entry:
                 self.logger.warning("Task entry is empty, skipping")
                 continue
@@ -152,7 +164,7 @@ class TaskScheduler:
                         continue
                     run_at = datetime.fromisoformat(run_at_str)
                     self.logger.info(f"Scheduling date task '{entry}' at {run_at}")
-                    self.schedule_at(entry, run_at, job_id=job_id, provider=provider, accounts=accounts)
+                    self.schedule_at(entry, run_at, job_id=job_id, provider=provider, accounts=accounts, cookies=cookies)
                 elif stype == "cron":
                     fields: Dict[str, Any] = {}
                     crontab = sched.get("crontab")
@@ -181,7 +193,7 @@ class TaskScheduler:
                         self.logger.warning(f"No valid cron fields found for task: {entry}")
                         continue
                     self.logger.info(f"Scheduling cron task '{entry}' with fields: {fields}")
-                    self.schedule_cron(entry, fields, job_id=job_id, provider=provider, accounts=accounts)
+                    self.schedule_cron(entry, fields, job_id=job_id, provider=provider, accounts=accounts, cookies=cookies)
                 elif stype == "window":
                     base_str = sched.get("base_at") or sched.get("at")
                     minutes = int(sched.get("window_minutes") or sched.get("window") or 0)
@@ -190,21 +202,21 @@ class TaskScheduler:
                         continue
                     base_at = datetime.fromisoformat(base_str)
                     self.logger.info(f"Scheduling window task '{entry}' at {base_at} with window {minutes} minutes")
-                    self.schedule_window(entry, base_at, minutes, job_id=job_id, provider=provider, accounts=accounts)
+                    self.schedule_window(entry, base_at, minutes, job_id=job_id, provider=provider, accounts=accounts, cookies=cookies)
                 elif stype == "between":
                     start_str = sched.get("start_at") or sched.get("start")
                     end_str = sched.get("end_at") or sched.get("end")
-                    if not start_str or not end_str:
+                    if not start_at or not end_str:
                         self.logger.warning(f"Missing start_at or end_at for between task: {entry}")
                         continue
                     start_at = datetime.fromisoformat(start_str)
                     end_at = datetime.fromisoformat(end_str)
                     self.logger.info(f"Scheduling between task '{entry}' from {start_at} to {end_at}")
-                    self.schedule_between(entry, start_at, end_at, job_id=job_id, provider=provider, accounts=accounts)
+                    self.schedule_between(entry, start_at, end_at, job_id=job_id, provider=provider, accounts=accounts, cookies=cookies)
                 else:
                     self.logger.warning(f"Unknown schedule type '{stype}' for task: {entry}")
                     continue
-                result["loaded"].append({"job_id": job_id, "entry": entry, "type": stype, "provider": provider, "accounts": accounts})
+                result["loaded"].append({"job_id": job_id, "entry": entry, "type": stype, "provider": provider, "accounts": accounts, "cookies": cookies})
             except Exception as e:
                 self.logger.error(f"Failed to schedule task {entry}: {e}")
                 continue

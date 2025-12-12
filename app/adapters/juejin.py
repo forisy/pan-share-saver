@@ -1,7 +1,5 @@
-import os
-from typing import Optional, Dict, Any
-from urllib.parse import urlparse, parse_qs
-from ..config import HEADLESS, ALIYUN_NODE_PATH, ALIYUN_TARGET_FOLDER, JUEJIN_USER_DATA_DIR
+from typing import Optional, Dict, Any, Union
+from ..config import JUEJIN_USER_DATA_DIR
 from ..browser import manager
 from ..base import ShareAdapter
 from ..logger import create_logger
@@ -93,7 +91,3 @@ class JuejinAdapter(ShareAdapter):
     def name(self) -> str:
         return "juejin"
 
-    async def transfer(self, link: str, account: Optional[str] = None) -> Dict[str, Any]:
-        # Transfer functionality not implemented for Juejin
-        self.logger.warning("Transfer method called but not implemented for Juejin")
-        pass
