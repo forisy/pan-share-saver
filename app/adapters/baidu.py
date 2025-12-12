@@ -5,6 +5,7 @@ from urllib.parse import urlparse, parse_qs
 from ..config import HEADLESS, BAIDU_NODE_PATH, BAIDU_TARGET_FOLDER, BAIDU_USER_DATA_DIR
 from ..browser import manager
 from ..base import ShareAdapter
+from ..logger import create_logger
 
 
 class BaiduAdapter(ShareAdapter):
@@ -12,6 +13,7 @@ class BaiduAdapter(ShareAdapter):
         super().__init__()
         self._sessions = {}
         self.user_data_dir = BAIDU_USER_DATA_DIR
+        self.logger = create_logger("baidu")
 
     async def get_qr_code(self, account: Optional[str] = None):
         import uuid, time, asyncio
@@ -63,22 +65,26 @@ class BaiduAdapter(ShareAdapter):
                 "logged_in": islogin,
                 "user_data_dir": ud,
             }
+            self.logger.info(f"Generated QR code session: {session_id}, login status: {islogin}")
             return session_id, png_bytes, islogin
         except Exception as e:
-            print(f"get_qr_code error: {e}")
+            self.logger.error(f"get_qr_code error: {e}")
             return str(uuid.uuid4()), b"", False
 
     async def poll_login_status(self, session_id):
         import asyncio
         session = self._sessions.get(session_id)
         if not session:
+            self.logger.warning(f"Session {session_id} not found for login polling")
             return
         page = session["page"]
+        self.logger.info(f"Starting login polling for session: {session_id}")
         for _ in range(60):
             try:
                 btn = await page.query_selector("text=去登录")
                 if btn is None:
                     session["logged_in"] = True
+                    self.logger.info(f"Login detected for session: {session_id}")
                     try:
                         await manager.close_context(session.get("user_data_dir"))
                     except Exception:
@@ -87,6 +93,7 @@ class BaiduAdapter(ShareAdapter):
             except Exception:
                 pass
             await asyncio.sleep(3)
+        self.logger.warning(f"Login polling timed out for session: {session_id}")
         self._sessions.pop(session_id, None)
 
     @property
@@ -111,16 +118,18 @@ class BaiduAdapter(ShareAdapter):
         return {"url": url, "code": code}
 
     async def transfer(self, link: str, account: Optional[str] = None) -> Dict[str, Any]:
+        self.logger.info(f"Starting transfer for link: {link[:50]}..." if len(link) > 50 else f"Starting transfer for link: {link}")
         ctx, page = await self.open_context_and_page(account)
         try:
             info = self._extract(link)
             url = (info["url"] or "").strip().strip('`"')
-            print("[baidu] open home")
+            self.logger.info("Opening home page")
             await page.goto("https://pan.baidu.com/", wait_until="domcontentloaded", timeout=30000)
             await page.wait_for_timeout(1000)
             need_login = await page.query_selector("text=去登录") is not None
-            print(f"[baidu] login required: {need_login}")
+            self.logger.info(f"Login required: {need_login}")
             if need_login:
+                self.logger.warning("User not logged in, transfer cancelled")
                 return {
                     "status": "fail",
                     "provider": self.name,
@@ -128,24 +137,24 @@ class BaiduAdapter(ShareAdapter):
                     "message": "未登录，请先扫码登录后再转存",
                 }
             if not url:
-                print("[baidu] invalid share url")
+                self.logger.error("Invalid share URL")
                 return {
                     "status": "fail",
                     "provider": self.name,
                     "share_link": url,
                     "message": "分享链接无效",
                 }
-            print(f"[baidu] open share: {url}")
+            self.logger.info(f"Opening share page: {url}")
             await page.goto(url, wait_until="domcontentloaded", timeout=40000)
             await page.wait_for_timeout(1000)
             try:
                 need_pwd = page.get_by_text("提取码", exact=False)
                 cnt = await need_pwd.count()
-                print(f"[baidu] need code: {cnt}")
+                self.logger.info(f"Need password check: {cnt}")
                 if cnt:
                     code = info.get("code")
                     if not code:
-                        print("[baidu] missing code")
+                        self.logger.error("Missing code for password-protected share")
                         return {
                             "status": "fail",
                             "provider": self.name,
@@ -156,42 +165,44 @@ class BaiduAdapter(ShareAdapter):
                     if inp:
                         try:
                             await inp.fill(code)
-                            print(f"[baidu] code filled: {code}")
+                            self.logger.info(f"Code filled: {code}")
                         except Exception:
                             pass
                     btn = page.get_by_text("提取文件", exact=False)
                     btn_cnt = await btn.count()
-                    print(f"[baidu] click 提取文件: {btn_cnt}")
+                    self.logger.info(f"Clicking '提取文件': {btn_cnt}")
                     if btn_cnt:
                         try:
                             await btn.first.click()
                         except Exception:
                             pass
                     await page.wait_for_load_state("domcontentloaded", timeout=30000)
-            except Exception:
+            except Exception as e:
+                self.logger.warning(f"Error during password handling: {e}")
                 pass
 
             try:
-                print("[baidu] wait 保存到网盘")
+                self.logger.info("Waiting for '保存到网盘' button")
                 await page.wait_for_selector("text=保存到网盘", timeout=30000)
             except Exception:
+                self.logger.info("Falling back to network idle wait")
                 await page.wait_for_load_state("networkidle", timeout=30000)
 
             if BAIDU_TARGET_FOLDER:
-                print("[baidu] select save path panel")
+                self.logger.info("Selecting save path panel")
                 btn_path = await page.query_selector('div[class*="bottom-save-path"]') or await page.query_selector('div[class*="save-path"]')
                 if btn_path:
                     try:
                         await btn_path.click()
-                        print("[baidu] save path panel opened")
+                        self.logger.info("Save path panel opened")
                     except Exception:
-                        pass
+                        self.logger.warning("Failed to open save path panel")
                 try:
                     await page.wait_for_selector("div[class*='file-tree-container'], div[class*='file-tree']", timeout=30000)
                 except Exception:
                     pass
 
-                print(f"[baidu] locate folder: {BAIDU_NODE_PATH}")
+                self.logger.info(f"Locating folder: {BAIDU_NODE_PATH}")
                 folder = await page.query_selector(f'[node-path="{BAIDU_NODE_PATH}"]')
                 if folder is None:
                     loc = page.get_by_text(BAIDU_TARGET_FOLDER, exact=False)
@@ -200,9 +211,9 @@ class BaiduAdapter(ShareAdapter):
                 if folder is not None:
                     try:
                         await folder.click()
-                        print("[baidu] folder selected")
+                        self.logger.info("Folder selected")
                     except Exception:
-                        pass
+                        self.logger.warning("Failed to select folder")
                 await page.wait_for_timeout(500)
                 confirm = await page.query_selector('[node-type="confirm"]')
                 if confirm is None:
@@ -212,31 +223,31 @@ class BaiduAdapter(ShareAdapter):
                 if confirm is not None:
                     try:
                         await confirm.click()
-                        print("[baidu] confirm path")
+                        self.logger.info("Path confirmed")
                     except Exception:
-                        pass
+                        self.logger.warning("Failed to confirm path")
                 await page.wait_for_timeout(800)
 
             save_btn = page.get_by_text("保存到网盘", exact=False)
             save_cnt = await save_btn.count()
-            print(f"[baidu] click 保存到网盘: {save_cnt}")
+            self.logger.info(f"Clicking '保存到网盘': {save_cnt}")
             if save_cnt:
                 try:
                     await save_btn.first.click()
                 except Exception:
-                    pass
+                    self.logger.warning("Failed to click '保存到网盘'")
             else:
                 alt = page.locator("text=保存")
                 alt_cnt = await alt.count()
-                print(f"[baidu] click 保存: {alt_cnt}")
+                self.logger.info(f"Clicking '保存': {alt_cnt}")
                 if alt_cnt:
                     try:
                         await alt.first.click()
                     except Exception:
-                        pass
+                        self.logger.warning("Failed to click '保存'")
             await page.wait_for_timeout(1000)
 
-            print("[baidu] transfer success")
+            self.logger.info("Transfer completed successfully")
             return {
                 "status": "success",
                 "provider": self.name,
@@ -245,9 +256,10 @@ class BaiduAdapter(ShareAdapter):
                 "message": "transferred",
             }
         except Exception as e:
-            print(f"[baidu] transfer failed: {e}")
+            self.logger.error(f"Transfer failed: {e}")
         finally:
             try:
                 await manager.close_context(self._resolve_user_data_dir(account))
+                self.logger.info(f"Browser context closed for account: {account}")
             except Exception:
-                pass
+                self.logger.warning("Failed to close browser context")

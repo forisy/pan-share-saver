@@ -4,12 +4,14 @@ from urllib.parse import urlparse, parse_qs
 from ..config import HEADLESS, ALIYUN_NODE_PATH, ALIYUN_TARGET_FOLDER, PTFANS_USER_DATA_DIR
 from ..browser import manager
 from ..base import ShareAdapter
+from ..logger import create_logger
 
 class PtfansAdapter(ShareAdapter):
     def __init__(self):
         super().__init__()
         self._sessions = {}
-        self.user_data_dir = PTFANS_USER_DATA_DIR 
+        self.user_data_dir = PTFANS_USER_DATA_DIR
+        self.logger = create_logger("ptfans")
 
     async def get_qr_code(self, account: Optional[str] = None):
         import uuid, time, asyncio
@@ -30,6 +32,7 @@ class PtfansAdapter(ShareAdapter):
         ctx, page = await self.open_context_and_page(account)
         try:
             islogin = False
+            self.logger.info("Opening Ptfans attendance page")
             await page.goto("https://ptfans.cc/attendance.php", wait_until="domcontentloaded", timeout=40000)
             await asyncio.sleep(3)
             btn = await page.query_selector("text=欢迎回来")
@@ -49,22 +52,26 @@ class PtfansAdapter(ShareAdapter):
                 "logged_in": islogin,
                 "user_data_dir": ud,
             }
+            self.logger.info(f"Generated QR code session: {session_id}, login status: {islogin}")
             return session_id, png_bytes, islogin
         except Exception as e:
-            print(f"get_qr_code error: {e}")
+            self.logger.error(f"get_qr_code error: {e}")
             return str(uuid.uuid4()), b"", False
 
     async def poll_login_status(self, session_id):
         import asyncio, time
         session = self._sessions.get(session_id)
         if not session:
+            self.logger.warning(f"Session {session_id} not found for login polling")
             return
         page = session["page"]
-        for _ in range(60):
+        self.logger.info(f"Starting login polling for session: {session_id}")
+        for i in range(60):
             try:
                 btn = await page.query_selector("text=欢迎回来")
                 if btn is not None:
                     session["logged_in"] = True
+                    self.logger.info(f"Login detected for session: {session_id}")
                     try:
                         await manager.close_context(session.get("user_data_dir") or ud)
                     except Exception:
@@ -73,11 +80,14 @@ class PtfansAdapter(ShareAdapter):
             except Exception:
                 pass
             await asyncio.sleep(3)
+        self.logger.warning(f"Login polling timed out for session: {session_id}")
         self._sessions.pop(session_id, None)
 
     @property
     def name(self) -> str:
         return "ptfans"
-    
+
     async def transfer(self, link: str, account: Optional[str] = None) -> Dict[str, Any]:
+        # Transfer functionality not implemented for Ptfans
+        self.logger.warning("Transfer method called but not implemented for Ptfans")
         pass

@@ -4,6 +4,9 @@ from .demo import DemoAdapter
 from .juejin_signin import JuejinSigninAdapter
 from .v2ex_signin import V2exSigninAdapter
 from .ptfans_signin import PtfansSigninAdapter
+from ..logger import create_logger
+
+logger = create_logger("task-registry")
 
 _TASK_REGISTRY: Dict[str, TaskAdapter] = {
     "demo": DemoAdapter(),
@@ -13,5 +16,10 @@ _TASK_REGISTRY: Dict[str, TaskAdapter] = {
 }
 
 def resolve_task_adapter(name: str) -> Optional[TaskAdapter]:
-    return _TASK_REGISTRY.get((name or "").lower())
-
+    logger.info(f"Resolving task adapter: {name}")
+    adapter = _TASK_REGISTRY.get((name or "").lower())
+    if adapter is None:
+        logger.warning(f"No task adapter found for: {name}")
+    else:
+        logger.info(f"Task adapter found: {name}")
+    return adapter

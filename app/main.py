@@ -6,6 +6,7 @@ from .config import TASKS_CONFIG_PATH, BAIDU_USER_DATA_DIR, ALIYUN_USER_DATA_DIR
 from .browser import manager
 from .tasks.registry import resolve_task_adapter
 from .adapters.registry import resolve_adapter_from_link, resolve_adapter_from_provider
+from .logger import create_logger
 
 import asyncio
 import os
@@ -18,6 +19,7 @@ if os.name == "nt":
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 app = FastAPI()
+main_logger = create_logger("main")
 
 # ==============================
 #       STORAGE SESSIONS
@@ -33,9 +35,10 @@ async def _transfer_worker():
         adapter, url = await _TRANSFER_QUEUE.get()
         try:
             try:
+                main_logger.info(f"Processing transfer request for {adapter.name}: {url}")
                 await adapter.transfer(url)
-            except Exception:
-                pass
+            except Exception as e:
+                main_logger.error(f"Transfer failed for {adapter.name}: {e}")
         finally:
             _TRANSFER_QUEUE.task_done()
             # _TRANSFER_PENDING.discard(url)
@@ -43,45 +46,57 @@ async def _transfer_worker():
 async def _tasks_config_watcher():
     watch_dir = TASKS_CONFIG_PATH or "."
     if os.path.isdir(watch_dir):
+        main_logger.info(f"Starting tasks config watcher for directory: {watch_dir}")
         async for changes in awatch(watch_dir):
             try:
                 # Check if the changed file is tasks.json
-                for _, changed in changes:
+                for change_type, changed in changes:
                     filename = os.path.basename(changed)
                     if filename == "tasks.json":
+                        main_logger.info(f"Detected change in tasks.json: {change_type} - {changed}")
                         try:
                             task_scheduler.reload_from_config(changed)
-                        except Exception:
-                            pass
+                            main_logger.info("Tasks config reloaded successfully")
+                        except Exception as e:
+                            main_logger.error(f"Failed to reload tasks config: {e}")
                         break
-            except Exception:
-                pass
+            except Exception as e:
+                main_logger.error(f"Error in tasks config watcher: {e}")
 
 @app.on_event("startup")
 async def _on_startup():
+    main_logger.info("Application starting up")
     asyncio.create_task(_transfer_worker())
     try:
         os.makedirs(TASKS_CONFIG_PATH or ".", exist_ok=True)
-    except Exception:
-        pass
+        main_logger.info(f"Ensured config directory exists: {TASKS_CONFIG_PATH}")
+    except Exception as e:
+        main_logger.error(f"Failed to create config directory: {e}")
     asyncio.create_task(_tasks_config_watcher())
     task_scheduler.start()
+    main_logger.info("Task scheduler started")
     try:
-        task_scheduler.load_from_config(os.path.join(TASKS_CONFIG_PATH or ".", "tasks.json"))
-    except Exception:
-        pass
+        config_path = os.path.join(TASKS_CONFIG_PATH or ".", "tasks.json")
+        result = task_scheduler.load_from_config(config_path)
+        main_logger.info(f"Loaded tasks config from {config_path}: {result}")
+    except Exception as e:
+        main_logger.error(f"Failed to load tasks config: {e}")
     try:
         for bdir in (BAIDU_USER_DATA_DIR, ALIYUN_USER_DATA_DIR, JUEJIN_USER_DATA_DIR, V2EX_USER_DATA_DIR):
             manager._cleanup_profile_locks(bdir)
-    except Exception:
-        pass
+        main_logger.info("Cleaned up profile locks")
+    except Exception as e:
+        main_logger.error(f"Failed to cleanup profile locks: {e}")
+    main_logger.info("Application startup completed")
 
 @app.on_event("shutdown")
 async def _on_shutdown():
+    main_logger.info("Application shutting down")
     try:
         await manager.stop()
-    except Exception:
-        pass
+        main_logger.info("Browser manager stopped")
+    except Exception as e:
+        main_logger.error(f"Error stopping browser manager: {e}")
 
 # ================================================
 #                FASTAPI ROUTES
@@ -121,12 +136,14 @@ async def login_vnc(provider: str = "baidu",  account: str = ""):
 
 @app.post("/transfer", response_model=TransferResult)
 async def transfer(req: TransferLink):
-    print(req.model_dump_json())
+    main_logger.info(f"Transfer request received: {req.model_dump_json()}")
     adapter = resolve_adapter_from_link(req.url)
     if adapter is None:
+        main_logger.warning(f"Unsupported provider for URL: {req.url}")
         raise HTTPException(status_code=400, detail="unsupported provider")
     url = (req.url or "").strip().strip('`"')
     if url in _TRANSFER_PENDING:
+        main_logger.info(f"Duplicate transfer request ignored: {url}")
         return {
             "status": "ignored",
             "provider": getattr(adapter, "name", "unknown"),
@@ -135,6 +152,7 @@ async def transfer(req: TransferLink):
             "message": "duplicate",
         }
     _TRANSFER_PENDING.add(url)
+    main_logger.info(f"Queuing transfer for {adapter.name}: {url}")
     await _TRANSFER_QUEUE.put((adapter, url))
     return {
         "status": "accepted",
