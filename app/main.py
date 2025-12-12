@@ -45,9 +45,10 @@ async def _tasks_config_watcher():
     if os.path.isdir(watch_dir):
         async for changes in awatch(watch_dir):
             try:
-                target = os.path.normcase(os.path.abspath(watch_dir))
+                # Check if the changed file is tasks.json
                 for _, changed in changes:
-                    if os.path.normcase(os.path.abspath(changed)) == target:
+                    filename = os.path.basename(changed)
+                    if filename == "tasks.json":
                         try:
                             task_scheduler.reload_from_config(changed)
                         except Exception:
