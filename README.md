@@ -3,12 +3,12 @@
 基于 FastAPI + Playwright 的网盘分享链接一键转存服务，当前支持百度网盘与阿里云盘（Alipan）分享链接。
 
 ## 功能
-- 扫码登录并持久化登录态（Playwright `user_data_dir`，支持“按账号隔离”）
+- 扫码登录并持久化登录态（Playwright `user_data_dir`，支持"按账号隔离"）
 - 支持百度网盘与阿里云盘分享链接转存
 - REST API：
   - `GET /login/qr`（支持 `provider` 与 `account`，可直接返回 PNG）
   - `POST /transfer`
-  - `POST /tasks/*`（定时任务调度，支持 `provider`、`accounts` 列表和 `cookies` 字段）
+  - `POST /tasks/*`（定时任务调度，支持 `provider` 与 `accounts` 列表和 `cookies` 字段）
   - `GET /login/vnc`（支持 `provider` 与 `account`，重定向到 Web VNC 页面）
   - `GET /adapters/enabled`（列出已启用的存储适配器与提供者）
   - `GET /tasks/enabled`（列出已启用的任务与已调度任务）
@@ -149,9 +149,26 @@ curl -X POST "http://localhost:8000/transfer" \
   }'
 ```
 
-#### 任务调度 API
-在任务调度 API 中传递 cookies：
+或者使用 JSON 对象格式：
+```bash
+curl -X POST "http://localhost:8000/transfer" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://pan.baidu.com/s/xxxx",
+    "account": "my_account",
+    "cookies": {
+      "baidu.com": {
+        "BDUSS": "your_bduss_value",
+        "STOKEN": "your_stoken_value"
+      }
+    }
+  }'
+```
 
+#### 任务调度 API
+在通过 API 调度任务时，也可以传递 cookies 参数：
+
+**定时任务 API 示例：**
 ```bash
 curl -X POST "http://localhost:8000/tasks/run_now" \
   -H "Content-Type: application/json" \
@@ -168,17 +185,305 @@ curl -X POST "http://localhost:8000/tasks/run_now" \
   }'
 ```
 
-### 3. 使用建议
+### Cookie 格式说明
+- **字符串格式**：使用分号分隔的 "key=value" 对，例如 `"cookie1=value1; cookie2=value2"`
+- **JSON 对象格式**：以域名作为键，域名下的 cookie 键值对作为值
+- **JSON 数组格式**：完全兼容 Playwright 的 cookie 设置格式，包含 name、value、domain、path 等字段
+
+### 使用建议
 1. **安全性**：Cookie 包含敏感登录信息，请妥善保管，避免泄露
 2. **时效性**：Cookie 有过期时间，需要定期更新
 3. **兼容性**：建议使用 JSON 对象格式，兼容性最好
 4. **调试**：如果 Cookie 登录失败，可以先尝试手动登录获取最新的 Cookie
 
-### VNC 显示与自适应
-- noVNC 支持本地缩放与远端分辨率调整：
-  - `resize=scale`：按浏览器窗口缩放显示（推荐，兼容性最好）。
-  - `resize=remote`：请求服务端调整桌面分辨率（需 VNC 服务器支持 SetDesktopSize/ExtendedDesktopSize）。
-- 当前镜像使用 `x11vnc + Xvfb`，默认固定分辨率 `1280x800`；通常推荐 `resize=scale` 达到自适应效果。
+## 任务调度与配置
+
+### 配置字段表
+
+**任务级字段**
+
+| 字段 | 别名 | 类型 | 必需 | 说明 |
+|------|------|-----|------|------|
+| `name` | `id` | string | 否 | 任务名称，作为 `job_id` 使用，不设置时自动生成 |
+| `entry` | `adapter` | string | 是 | 执行入口，对应已注册的 `TaskAdapter` 名称 |
+| `provider` | `provider_name` | string | 否 | 任务执行的适配器提供者 |
+| `accounts` | - | array | 否 | 账号列表，用于按账号隔离用户数据目录并逐账号执行 |
+| `cookies` | - | string/object/array | 否 | Cookie 配置，支持多种格式 |
+
+**调度字段**
+
+| 字段 | 别名 | 类型 | 说明 | 示例 |
+|------|------|-----|------|------|
+| `type` | `kind` | string | 调度类型（`cron`/`date`/`between`/`window`） | `"cron"` |
+| `crontab` | - | string | 标准 5 段 crontab 格式 | `"0 9 * * *"` |
+| `fields` | - | object | 对象形式的 cron 字段 | `{"minute": "0", "hour": "9"}` |
+| `second`/`minute`/`hour`/`day`/`month`/`day_of_week` | - | string | 直接的 cron 字段 | `"0"` |
+| `run_at` | `at` | string | ISO 8601 日期时间（date 类型） | `"2025-12-31T09:00:00"` |
+| `start_at` | `start` | string | 开始时间（between 类型） | `"2025-12-31T08:00:00"` |
+| `end_at` | `end` | string | 结束时间（between 类型） | `"2025-12-31T09:00:00"` |
+| `base_at` | `at` | string | 基准时间（window 类型） | `"2025-12-31T08:00:00"` |
+| `window_minutes` | `window` | number | 时间窗口（分钟） | `60` |
+
+**Cookie 格式说明**
+
+| 格式 | 示例 | 说明 |
+|------|------|------|
+| 字符串 | `"cookie1=value1; cookie2=value2"` | 分号分隔的键值对 |
+| JSON 对象 | `{"domain.com": {"name": "value"}}` | 以域名分组的 Cookie 键值对 |
+| JSON 数组 | `[{"name": "n", "value": "v", ...}]` | Playwright 原生 Cookie 格式 |
+
+**支持的 TaskAdapter 列表**
+- `demo` - 示例任务适配器
+- `juejin_signin` - 掘金签到任务
+- `v2ex_signin` - V2EX 签到任务  
+- `ptfans_signin` - PTFans 签到任务
+
+**支持的 Provider 列表**
+- `baidu`, `alipan`, `juejin`, `v2ex`, `ptfans`
+
+### 配置示例
+
+**完整的 tasks.json 结构：**
+```json
+{
+  "tasks": [
+    {
+      "name": "demo_hourly",
+      "entry": "demo",
+      "provider": "baidu",
+      "accounts": ["accA", "accB"],
+      "cookies": {
+        "baidu.com": {
+          "BDUSS": "your_bduss_value",
+          "STOKEN": "your_stoken_value"
+        }
+      },
+      "schedule": { "type": "cron", "crontab": "0 * * * *" }
+    },
+    {
+      "name": "demo_once",
+      "entry": "demo",
+      "provider": "alipan",
+      "accounts": ["accX"],
+      "cookies": "PDSM_ARTIFACT=your_alipan_cookie_value",
+      "schedule": { "type": "date", "run_at": "2025-12-10T10:00:00" }
+    },
+    {
+      "name": "demo_between",
+      "entry": "demo",
+      "provider": "baidu",
+      "accounts": ["accA"],
+      "schedule": { "type": "between", "start_at": "2025-12-10T08:00:00", "end_at": "2025-12-10T09:00:00" }
+    },
+    {
+      "name": "demo_window",
+      "entry": "demo",
+      "provider": "alipan",
+      "accounts": ["default"],
+      "cookies": [
+        {
+          "name": "cookie_name",
+          "value": "cookie_value",
+          "domain": "alipan.com",
+          "path": "/",
+          "httpOnly": false,
+          "secure": true
+        }
+      ],
+      "schedule": { "type": "window", "base_at": "2025-12-10T08:00:00", "window_minutes": 30 }
+    }
+  ]
+}
+```
+
+### 详细配置说明
+
+1. **基本任务配置**（最简单的定时任务）
+```json
+{
+  "tasks": [
+    {
+      "entry": "juejin_signin",
+      "provider": "juejin",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
+```
+- 使用简化的 crontab 字符串格式
+- 任务名称自动生成
+- 无账号隔离，使用默认账号
+
+2. **多账号轮询任务**
+```json
+{
+  "tasks": [
+    {
+      "name": "v2ex_daily_checkin",
+      "adapter": "v2ex_signin",
+      "provider": "v2ex",
+      "accounts": ["user1", "user2", "user3"],
+      "schedule": {
+        "type": "cron",
+        "fields": {
+          "minute": "0",
+          "hour": "9"
+        }
+      }
+    }
+  ]
+}
+```
+- 使用 `accounts` 数组为每个账号独立执行任务
+- 账号数据隔离存储在 `storage/v2ex_userdata/<account_name>/`
+
+3. **Cookie 驱动任务**
+```json
+{
+  "tasks": [
+    {
+      "id": "alipan_transfer_task",  // 也可以使用 id 替代 name
+      "entry": "demo",
+      "provider_name": "alipan",    // 也可以使用 provider_name 替代 provider
+      "cookies": {
+        "alipan.com": {
+          "authorization": "Bearer your_token",
+          "refreshToken": "your_refresh_token"
+        }
+      },
+      "schedule": {
+        "kind": "cron",             // 也可以使用 kind 替代 type
+        "crontab": "30 7 * * *"
+      }
+    }
+  ]
+}
+```
+- 使用 JSON 对象格式的 cookies
+- 支持字段别名（id/name, entry/adapter, provider/provider_name, kind/type）
+
+4. **时间窗口任务**
+```json
+{
+  "tasks": [
+    {
+      "name": "random_checkin_window",
+      "entry": "ptfans_signin", 
+      "provider": "ptfans",
+      "schedule": {
+        "type": "window",
+        "base_at": "2025-12-31T08:00:00",    // 基准时间
+        "window": 60                         // 60分钟窗口内随机执行
+      }
+    }
+  ]
+}
+```
+- 在指定基准时间后的 60 分钟窗口内随机选择执行时间
+- 使用 `window` 替代 `window_minutes`（别名支持）
+
+5. **时间段随机任务**
+```json
+{
+  "tasks": [
+    {
+      "name": "random_checkin_between",
+      "entry": "juejin_signin",
+      "provider": "juejin", 
+      "schedule": {
+        "type": "between",
+        "start": "2025-12-31T07:00:00",     // 开始时间
+        "end": "2025-12-31T09:00:00"        // 结束时间
+      }
+    }
+  ]
+}
+```
+- 在指定时间段内随机选择执行时间
+- 使用 `start`/`end` 替代 `start_at`/`end_at`（别名支持）
+
+6. **单次执行任务**
+```json
+{
+  "tasks": [
+    {
+      "name": "one_time_cleanup",
+      "entry": "demo",
+      "provider": "baidu",
+      "accounts": ["main_account"],
+      "cookies": "BDUSS=your_value; STOKEN=your_value",  // 字符串格式 cookies
+      "schedule": {
+        "type": "date",
+        "at": "2025-12-31T23:59:59"        // 使用 at 替代 run_at
+      }
+    }
+  ]
+}
+```
+- 只执行一次的特定时间任务
+- Cookie 使用字符串格式
+
+7. **复杂 Cron 任务**
+```json
+{
+  "tasks": [
+    {
+      "name": "complex_cron_task",
+      "entry": "demo",
+      "provider": "alipan",
+      "schedule": {
+        "type": "cron",
+        "minute": "30",           // 每小时的 30 分
+        "hour": "*/2",            // 每 2 小时
+        "day": "1,15",            // 每月 1 号和 15 号
+        "month": "1-12",          // 每月
+        "day_of_week": "0-4"      // 周一到周五
+      }
+    }
+  ]
+}
+```
+- 使用详细的 cron 字段格式
+- 支持复杂的调度规则
+
+8. **Playwright Cookie 格式任务**
+```json
+{
+  "tasks": [
+    {
+      "name": "playwright_cookie_task",
+      "entry": "demo",
+      "provider": "baidu",
+      "cookies": [
+        {
+          "name": "BDUSS",
+          "value": "your_bduss_value",
+          "domain": ".baidu.com",
+          "path": "/",
+          "expires": 2147483647,
+          "httpOnly": true,
+          "secure": true
+        },
+        {
+          "name": "STOKEN",
+          "value": "your_stoken_value", 
+          "domain": ".baidu.com",
+          "path": "/",
+          "expires": 2147483647,
+          "httpOnly": true,
+          "secure": true
+        }
+      ],
+      "schedule": {
+        "type": "cron",
+        "crontab": "0 0 * * *"
+      }
+    }
+  ]
+}
+```
+- 使用 Playwright 原生的 Cookie 数组格式
+- 包含完整的 Cookie 属性（expires, httpOnly, secure 等）
 
 ## API 使用
 
@@ -367,344 +672,6 @@ curl -X POST "http://localhost:8000/tasks/run_now" \
   }
   ```
 
-## 任务调度与配置
-- 支持通过 JSON 配置文件定义“任务名称/定时规则/执行入口”，应用启动时自动加载。
-- 配置文件夹位置：
-  - 默认：`app/config`
-  - 持久化：将其放至 `storage/config` 并设置环境变量 `TASKS_CONFIG_PATH=storage/config`
-
-## 任务调度与配置
-
-### 配置字段表
-
-**任务级字段**
-
-| 字段 | 别名 | 类型 | 必需 | 说明 |
-|------|------|-----|------|------|
-| `name` | `id` | string | 否 | 任务名称，作为 `job_id` 使用，不设置时自动生成 |
-| `entry` | `adapter` | string | 是 | 执行入口，对应已注册的 `TaskAdapter` 名称 |
-| `provider` | `provider_name` | string | 否 | 任务执行的适配器提供者 |
-| `accounts` | - | array | 否 | 账号列表，用于按账号隔离用户数据目录并逐账号执行 |
-| `cookies` | - | string/object/array | 否 | Cookie 配置，支持多种格式 |
-
-**调度字段**
-
-| 字段 | 別名 | 类型 | 说明 | 示例 |
-|------|------|-----|------|------|
-| `type` | `kind` | string | 调度类型（`cron`/`date`/`between`/`window`） | `"cron"` |
-| `crontab` | - | string | 标准 5 段 crontab 格式 | `"0 9 * * *"` |
-| `fields` | - | object | 对象形式的 cron 字段 | `{"minute": "0", "hour": "9"}` |
-| `second`/`minute`/`hour`/`day`/`month`/`day_of_week` | - | string | 直接的 cron 字段 | `"0"` |
-| `run_at` | `at` | string | ISO 8601 日期时间（date 类型） | `"2025-12-31T09:00:00"` |
-| `start_at` | `start` | string | 开始时间（between 类型） | `"2025-12-31T08:00:00"` |
-| `end_at` | `end` | string | 结束时间（between 类型） | `"2025-12-31T09:00:00"` |
-| `base_at` | `at` | string | 基准时间（window 类型） | `"2025-12-31T08:00:00"` |
-| `window_minutes` | `window` | number | 时间窗口（分钟） | `60` |
-
-**Cookie 格式说明**
-
-| 格式 | 示例 | 说明 |
-|------|------|------|
-| 字符串 | `"cookie1=value1; cookie2=value2"` | 分号分隔的键值对 |
-| JSON 对象 | `{"domain.com": {"name": "value"}}` | 以域名分组的 Cookie 键值对 |
-| JSON 数组 | `[{"name": "n", "value": "v", ...}]` | Playwright 原生 Cookie 格式 |
-
-**支持的 TaskAdapter 列表**
-- `demo` - 示例任务适配器
-- `juejin_signin` - 掘金签到任务
-- `v2ex_signin` - V2EX 签到任务  
-- `ptfans_signin` - PTFans 签到任务
-
-**支持的 Provider 列表**
-- `baidu`, `alipan`, `juejin`, `v2ex`, `ptfans`
-
-### 配置示例
-
-**完整的 tasks.json 结构：**
-```json
-{
-  "tasks": [
-    {
-      "name": "demo_hourly",
-      "entry": "demo",
-      "provider": "baidu",
-      "accounts": ["accA", "accB"],
-      "cookies": {
-        "baidu.com": {
-          "BDUSS": "your_bduss_value",
-          "STOKEN": "your_stoken_value"
-        }
-      },
-      "schedule": { "type": "cron", "crontab": "0 * * * *" }
-    },
-    {
-      "name": "demo_once",
-      "entry": "demo",
-      "provider": "alipan",
-      "accounts": ["accX"],
-      "cookies": "PDSM_ARTIFACT=your_alipan_cookie_value",
-      "schedule": { "type": "date", "run_at": "2025-12-10T10:00:00" }
-    },
-    {
-      "name": "demo_between",
-      "entry": "demo",
-      "provider": "baidu",
-      "accounts": ["accA"],
-      "schedule": { "type": "between", "start_at": "2025-12-10T08:00:00", "end_at": "2025-12-10T09:00:00" }
-    },
-    {
-      "name": "demo_window",
-      "entry": "demo",
-      "provider": "alipan",
-      "accounts": ["default"],
-      "cookies": [
-        {
-          "name": "cookie_name",
-          "value": "cookie_value",
-          "domain": "alipan.com",
-          "path": "/",
-          "httpOnly": false,
-          "secure": true
-        }
-      ],
-      "schedule": { "type": "window", "base_at": "2025-12-10T08:00:00", "window_minutes": 30 }
-    }
-  ]
-}
-```
-
-### 详细配置说明
-
-1. **基本任务配置**（最简单的定时任务）
-```json
-{
-  "tasks": [
-    {
-      "entry": "juejin_signin",
-      "provider": "juejin",
-      "schedule": "0 8 * * *"
-    }
-  ]
-}
-```
-- 使用简化的 crontab 字符串格式
-- 任务名称自动生成
-- 无账号隔离，使用默认账号
-
-2. **多账号轮询任务**
-```json
-{
-  "tasks": [
-    {
-      "name": "v2ex_daily_checkin",
-      "adapter": "v2ex_signin",
-      "provider": "v2ex",
-      "accounts": ["user1", "user2", "user3"],
-      "schedule": {
-        "type": "cron",
-        "fields": {
-          "minute": "0",
-          "hour": "9"
-        }
-      }
-    }
-  ]
-}
-```
-- 使用 `accounts` 数组为每个账号独立执行任务
-- 账号数据隔离存储在 `storage/v2ex_userdata/<account_name>/`
-
-3. **Cookie 驱动任务**
-```json
-{
-  "tasks": [
-    {
-      "id": "alipan_transfer_task",  // 也可以使用 id 替代 name
-      "entry": "demo",
-      "provider_name": "alipan",    // 也是可以使用 provider_name 替代 provider
-      "cookies": {
-        "alipan.com": {
-          "authorization": "Bearer your_token",
-          "refreshToken": "your_refresh_token"
-        }
-      },
-      "schedule": {
-        "kind": "cron",             // 也可以使用 kind 替代 type
-        "crontab": "30 7 * * *"
-      }
-    }
-  ]
-}
-```
-- 使用 JSON 对象格式的 cookies
-- 支持字段别名（id/name, entry/adapter, provider/provider_name, kind/type）
-
-4. **时间窗口任务**
-```json
-{
-  "tasks": [
-    {
-      "name": "random_checkin_window",
-      "entry": "ptfans_signin", 
-      "provider": "ptfans",
-      "schedule": {
-        "type": "window",
-        "base_at": "2025-12-31T08:00:00",    // 基准时间
-        "window": 60                         // 60分钟窗口内随机执行
-      }
-    }
-  ]
-}
-```
-- 在指定基准时间后的 60 分钟窗口内随机选择执行时间
-- 使用 `window` 替代 `window_minutes`（别名支持）
-
-5. **时间段随机任务**
-```json
-{
-  "tasks": [
-    {
-      "name": "random_checkin_between",
-      "entry": "juejin_signin",
-      "provider": "juejin", 
-      "schedule": {
-        "type": "between",
-        "start": "2025-12-31T07:00:00",     // 开始时间
-        "end": "2025-12-31T09:00:00"        // 结束时间
-      }
-    }
-  ]
-}
-```
-- 在指定时间段内随机选择执行时间
-- 使用 `start`/`end` 替代 `start_at`/`end_at`（别名支持）
-
-6. **单次执行任务**
-```json
-{
-  "tasks": [
-    {
-      "name": "one_time_cleanup",
-      "entry": "demo",
-      "provider": "baidu",
-      "accounts": ["main_account"],
-      "cookies": "BDUSS=your_value; STOKEN=your_value",  // 字符串格式 cookies
-      "schedule": {
-        "type": "date",
-        "at": "2025-12-31T23:59:59"        // 使用 at 替代 run_at
-      }
-    }
-  ]
-}
-```
-- 只执行一次的特定时间任务
-- Cookie 使用字符串格式
-
-7. **复杂 Cron 任务**
-```json
-{
-  "tasks": [
-    {
-      "name": "complex_cron_task",
-      "entry": "demo", 
-      "provider": "alipan",
-      "schedule": {
-        "type": "cron",
-        "minute": "30",           // 每小时的 30 分
-        "hour": "*/2",            // 每 2 小时
-        "day": "1,15",            // 每月 1 号和 15 号
-        "month": "1-12",          // 每月
-        "day_of_week": "0-4"      // 周一到周五
-      }
-    }
-  ]
-}
-```
-- 使用详细的 cron 字段格式
-- 支持复杂的调度规则
-
-8. **Playwright Cookie 格式任务**
-```json
-{
-  "tasks": [
-    {
-      "name": "playwright_cookie_task",
-      "entry": "demo",
-      "provider": "baidu",
-      "cookies": [
-        {
-          "name": "BDUSS",
-          "value": "your_bduss_value",
-          "domain": ".baidu.com",
-          "path": "/",
-          "expires": 2147483647,
-          "httpOnly": true,
-          "secure": true
-        },
-        {
-          "name": "STOKEN",
-          "value": "your_stoken_value", 
-          "domain": ".baidu.com",
-          "path": "/",
-          "expires": 2147483647,
-          "httpOnly": true,
-          "secure": true
-        }
-      ],
-      "schedule": {
-        "type": "cron",
-        "crontab": "0 0 * * *"
-      }
-    }
-  ]
-}
-```
-- 使用 Playwright 原生的 Cookie 数组格式
-- 包含完整的 Cookie 属性（expires, httpOnly, secure 等）
-
-### 配置字段表
-
-**任务级字段**
-
-| 字段 | 别名 | 类型 | 必需 | 说明 |
-|------|------|-----|------|------|
-| `name` | `id` | string | 否 | 任务名称，作为 `job_id` 使用，不设置时自动生成 |
-| `entry` | `adapter` | string | 是 | 执行入口，对应已注册的 `TaskAdapter` 名称 |
-| `provider` | `provider_name` | string | 否 | 任务执行的适配器提供者 |
-| `accounts` | - | array | 否 | 账号列表，用于按账号隔离用户数据目录并逐账号执行 |
-| `cookies` | - | string/object/array | 否 | Cookie 配置，支持多种格式 |
-
-**调度字段**
-
-| 字段 | 别名 | 类型 | 说明 | 示例 |
-|------|------|-----|------|------|
-| `type` | `kind` | string | 调度类型（`cron`/`date`/`between`/`window`） | `"cron"` |
-| `crontab` | - | string | 标准 5 段 crontab 格式 | `"0 9 * * *"` |
-| `fields` | - | object | 对象形式的 cron 字段 | `{"minute": "0", "hour": "9"}` |
-| `second`/`minute`/`hour`/`day`/`month`/`day_of_week` | - | string | 直接的 cron 字段 | `"0"` |
-| `run_at` | `at` | string | ISO 8601 日期时间（date 类型） | `"2025-12-31T09:00:00"` |
-| `start_at` | `start` | string | 开始时间（between 类型） | `"2025-12-31T08:00:00"` |
-| `end_at` | `end` | string | 结束时间（between 类型） | `"2025-12-31T09:00:00"` |
-| `base_at` | `at` | string | 基准时间（window 类型） | `"2025-12-31T08:00:00"` |
-| `window_minutes` | `window` | number | 时间窗口（分钟） | `60` |
-
-**Cookie 格式说明**
-
-| 格式 | 示例 | 说明 |
-|------|------|------|
-| 字符串 | `"cookie1=value1; cookie2=value2"` | 分号分隔的键值对 |
-| JSON 对象 | `{"domain.com": {"name": "value"}}` | 以域名分组的 Cookie 键值对 |
-| JSON 数组 | `[{"name": "n", "value": "v", ...}]` | Playwright 原生 Cookie 格式 |
-
-**支持的 TaskAdapter 列表**
-- `demo` - 示例任务适配器
-- `juejin_signin` - 掘金签到任务
-- `v2ex_signin` - V2EX 签到任务  
-- `ptfans_signin` - PTFans 签到任务
-
-**支持的 Provider 列表**
-- `baidu`, `alipan`, `juejin`, `v2ex`, `ptfans`
-
 ### 启动行为
 - 服务启动后会自动调用配置加载并注册定时任务，无需额外 API 操作。
 
@@ -712,7 +679,7 @@ curl -X POST "http://localhost:8000/tasks/run_now" \
 - 二维码会在约 180 秒内有效；登录成功后会在 `STORAGE_DIR/<provider>_userdata` 生成/更新登录态
 - 多账号隔离：当传入 `account` 时，登录态与浏览器缓存会持久化到 `STORAGE_DIR/<provider>_userdata/<account>` 子目录；未传入则使用默认目录
 - 应用启动后会运行后台队列处理器；`POST /transfer` 仅入队并立即返回，实际转存过程在后台执行
-- 转存时会尝试打开分享链接并点击“保存到网盘”，定位到 `BAIDU_TARGET_FOLDER`/`ALIPAN_TARGET_FOLDER` 对应目录后确认
+- 转存时会尝试打开分享链接并点击"保存到网盘"，定位到 `BAIDU_TARGET_FOLDER`/`ALIPAN_TARGET_FOLDER` 对应目录后确认
 - Windows 环境已在应用内部设置事件循环策略，无需额外处理
 
 ## 常见问题
